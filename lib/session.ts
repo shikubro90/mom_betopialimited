@@ -1,11 +1,11 @@
-import { SignJWT, jwtVerify } from "jose";
+import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 import { cookies }           from "next/headers";
 
 export const COOKIE_NAME = "mb_admin_token";
 
 const secret = () => new TextEncoder().encode(process.env.SESSION_SECRET);
 
-export interface AdminSession {
+export interface AdminSession extends JWTPayload {
   email: string;
 }
 
