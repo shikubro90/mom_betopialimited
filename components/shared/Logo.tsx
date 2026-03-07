@@ -24,7 +24,7 @@ export function Logo({ size = "md", className }: LogoProps) {
         M
       </div>
       <span className={cn("font-bold tracking-tight text-gray-900", s.text)}>
-        Meet<span className="gradient-text">Brief</span>
+        MoM<span className="gradient-text">Betopia</span>
       </span>
     </div>
   );

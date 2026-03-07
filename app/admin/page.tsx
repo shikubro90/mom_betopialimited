@@ -2,7 +2,7 @@ import { db }           from "@/lib/db";
 import { SummaryTable } from "@/components/admin/SummaryTable";
 import type { SummaryRow } from "@/components/admin/SummaryTable";
 
-export const metadata = { title: "Admin — MeetBrief" };
+export const metadata = { title: "Admin — MoMBetopia" };
 export const dynamic  = "force-dynamic";
 
 async function getData() {

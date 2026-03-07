@@ -82,7 +82,7 @@ export default function HomePage() {
         <div className="relative z-10 max-w-2xl mx-auto text-center space-y-5">
           <div className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-4 py-1.5 text-xs font-bold text-brand-700">
             <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
-            Powered by GPT-4o
+            Powered by MoMBetopia AI
           </div>
 
           <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight text-gray-900 leading-[1.1]">

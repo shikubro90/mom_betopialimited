@@ -75,7 +75,7 @@ function buildHtml(data: {
         <!-- Footer -->
         <tr>
           <td style="padding:16px 32px;border-top:1px solid #f3f4f6;">
-            <p style="margin:0;font-size:11px;color:#9ca3af;text-align:center;">Sent via <strong style="color:#6366f1;">MeetBrief</strong></p>
+            <p style="margin:0;font-size:11px;color:#9ca3af;text-align:center;">Sent via <strong style="color:#6366f1;">MoMBetopia</strong></p>
           </td>
         </tr>
 

@@ -9,7 +9,7 @@ export default function AdminLayout({
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <nav className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
         <span className="text-sm font-semibold text-brand-400 uppercase tracking-widest">
-          MeetBrief Admin
+          MoMBetopia Admin
         </span>
         <LogoutButton />
       </nav>

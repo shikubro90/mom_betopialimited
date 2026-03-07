@@ -56,7 +56,7 @@ export default function AdminLoginPage() {
             <Lock className="w-5 h-5 text-white" />
           </div>
           <div className="text-center">
-            <p className="text-xs font-bold text-brand-400 uppercase tracking-widest mb-1">MeetBrief</p>
+            <p className="text-xs font-bold text-brand-400 uppercase tracking-widest mb-1">MoMBetopia</p>
             <h1 className="text-xl font-bold text-white">Admin Access</h1>
           </div>
         </div>
