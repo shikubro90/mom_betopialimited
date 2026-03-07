@@ -35,4 +35,4 @@ jobs:
             git pull origin prod
             npm install --production=false
             npm run build
-            pm2 restart meetbrief
+            pm2 restart meetbrief || pm2 start npm --name meetbrief -- start -- -p 3002
