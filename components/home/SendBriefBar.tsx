@@ -1,7 +1,7 @@
 "use client";
 
 import { useState }             from "react";
-import { Send, Loader2, Check, Mail, Users, AtSign } from "lucide-react";
+import { Send, Loader2, Check, Mail, Users, AtSign, Paperclip } from "lucide-react";
 import { cn }                   from "@/lib/utils";
 import { fieldCls, FieldError } from "@/components/ui/form";
 import { Toast }                from "@/components/shared/Toast";
@@ -10,14 +10,15 @@ import type { Summary, MeetingMeta } from "@/types/meeting";
 type ToastState = { message: string; type: "success" | "error" } | null;
 
 interface Props {
-  defaultSubject: string;
-  defaultTo:      string;           // attendee emails pre-filled
-  summaryId:      string | null;
-  summary:        Summary;
-  meta:           MeetingMeta;
+  defaultSubject:  string;
+  defaultTo:       string;
+  summaryId:       string | null;
+  summary:         Summary;
+  meta:            MeetingMeta;
+  attachmentNames?: string[];
 }
 
-export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, meta }: Props) {
+export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, meta, attachmentNames }: Props) {
   const [subject,   setSubject]   = useState(defaultSubject);
   const [cc,        setCc]        = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -101,6 +102,16 @@ export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, me
               <p className="text-xs text-gray-400">No attendee emails — add them in the form above.</p>
             )}
           </div>
+
+          {/* Attachments */}
+          {attachmentNames && attachmentNames.length > 0 && (
+            <div className="rounded-xl bg-gray-50 border border-gray-100 px-4 py-3 flex flex-wrap gap-2">
+              <Paperclip className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
+              {attachmentNames.map((name) => (
+                <span key={name} className="text-[11px] bg-white border border-gray-200 rounded-md px-2 py-0.5 text-gray-600">{name}</span>
+              ))}
+            </div>
+          )}
 
           {/* Subject */}
           <div className="space-y-1.5">

@@ -8,7 +8,24 @@ import { SendBriefBar } from "@/components/home/SendBriefBar";
 import { Toast }        from "@/components/shared/Toast";
 import type { MeetingFormData, Summary, MeetingMeta, SummarizeResult } from "@/types/meeting";
 
-async function generateSummary(data: MeetingFormData): Promise<SummarizeResult> {
+async function readTextFiles(files: File[]): Promise<string> {
+  const textTypes = ["text/plain", "text/markdown", "text/csv", "application/json"];
+  const texts: string[] = [];
+  for (const file of files) {
+    if (textTypes.includes(file.type) || file.name.match(/\.(txt|md|csv|json)$/i)) {
+      try {
+        const content = await file.text();
+        texts.push(`\n\n--- Attachment: ${file.name} ---\n${content}`);
+      } catch { /* skip unreadable */ }
+    }
+  }
+  return texts.join("");
+}
+
+async function generateSummary(data: MeetingFormData, files: File[]): Promise<SummarizeResult> {
+  const fileText = await readTextFiles(files);
+  const rawInput = data.notes + fileText;
+
   const res = await fetch("/api/summarize", {
     method:  "POST",
     headers: { "Content-Type": "application/json" },
@@ -16,16 +33,13 @@ async function generateSummary(data: MeetingFormData): Promise<SummarizeResult> 
       title:     data.title,
       date:      data.date,
       attendees: data.attendees,
-      rawInput:  data.notes,
+      rawInput,
       tone:      data.tone,
     }),
   });
 
   const json = await res.json();
-
-  if (!res.ok) {
-    throw new Error(json.error ?? "Summarization failed");
-  }
+  if (!res.ok) throw new Error(json.error ?? "Summarization failed");
 
   return {
     summary: {
@@ -40,28 +54,57 @@ async function generateSummary(data: MeetingFormData): Promise<SummarizeResult> 
 }
 
 export default function HomePage() {
-  const [summary,    setSummary]    = useState<Summary | null>(null);
-  const [summaryId,  setSummaryId]  = useState<string | null>(null);
+  const [summary,        setSummary]        = useState<Summary | null>(null);
+  const [currentSummary, setCurrentSummary] = useState<Summary | null>(null);
+  const [summaryId,      setSummaryId]      = useState<string | null>(null);
+  const [summaryKey,     setSummaryKey]     = useState(0);
   const [meetingMeta,    setMeetingMeta]    = useState<MeetingMeta>({ title: "", date: "", attendees: "" });
   const [attendeeEmails, setAttendeeEmails] = useState("");
+  const [attachmentNames, setAttachmentNames] = useState<string[]>([]);
   const [isLoading,      setIsLoading]      = useState(false);
   const [error,          setError]          = useState<string | null>(null);
+  const [manualMode,     setManualMode]     = useState(false);
 
-  const handleSummarize = async (data: MeetingFormData) => {
+  const handleSummarize = async (data: MeetingFormData, files: File[]) => {
     setIsLoading(true);
     setSummary(null);
+    setCurrentSummary(null);
     setError(null);
+    setManualMode(data.mode === "manual");
     setMeetingMeta({ title: data.title, date: data.date, attendees: data.attendees });
     setAttendeeEmails(data.attendeeEmails ?? "");
+    setAttachmentNames(data.attachmentNames ?? []);
+    setSummaryKey((k) => k + 1);
+
+    if (data.mode === "manual") {
+      // Skip AI — show empty editable card
+      const empty: Summary = {
+        executiveSummary: "",
+        decisions:        [""],
+        actionItems:      [""],
+        nextSteps:        [""],
+        gist:             "",
+      };
+      setSummary(empty);
+      setCurrentSummary(empty);
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const { summary: result, id } = await generateSummary(data);
+      const { summary: result, id } = await generateSummary(data, files);
       setSummary(result);
+      setCurrentSummary(result);
       setSummaryId(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSummaryChange = (updated: Summary) => {
+    setCurrentSummary(updated);
   };
 
   return (
@@ -127,16 +170,23 @@ export default function HomePage() {
         )}
 
         {(isLoading || summary) && (
-          <SummaryCard summary={summary} isLoading={isLoading} />
+          <SummaryCard
+            key={summaryKey}
+            summary={summary}
+            isLoading={isLoading}
+            startEditing={manualMode}
+            onChange={handleSummaryChange}
+          />
         )}
 
-        {summary && (
+        {(currentSummary && !isLoading) && (
           <SendBriefBar
             defaultSubject={`Meeting Brief: ${meetingMeta.title}`}
             defaultTo={attendeeEmails}
             summaryId={summaryId}
-            summary={summary}
+            summary={currentSummary}
             meta={meetingMeta}
+            attachmentNames={attachmentNames}
           />
         )}
       </section>

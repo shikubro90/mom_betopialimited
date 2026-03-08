@@ -5,6 +5,8 @@ export interface MeetingFormData {
   attendeeEmails: string;
   notes:          string;
   tone:           string;
+  mode:           "ai" | "manual";
+  attachmentNames: string[];
 }
 
 export interface Summary {

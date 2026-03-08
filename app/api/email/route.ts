@@ -3,6 +3,16 @@ import { sendEmail }        from "@/lib/mailer";
 import { db }               from "@/lib/db";
 import { emailBodySchema, parseEmails } from "@/lib/validations";
 
+/* ─── Markdown renderer ──────────────────────────────────── */
+function renderMd(text: string): string {
+  return text
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/_(.*?)_/g,       "<em>$1</em>")
+    .replace(/==(.*?)==/g,     '<span style="background:#fef08a;padding:0 2px;border-radius:3px">$1</span>')
+    .replace(/\n/g, "<br>");
+}
+
 /* ─── HTML email builder ─────────────────────────────────── */
 function buildHtml(data: {
   title:            string;
@@ -62,7 +72,7 @@ function buildHtml(data: {
             <!-- Executive Summary -->
             <div style="background:#eef2ff;border-left:4px solid #6366f1;border-radius:8px;padding:16px;margin-bottom:24px;">
               <p style="margin:0 0 6px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#4f46e5;">Executive Summary</p>
-              <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;">${data.executiveSummary}</p>
+              <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;">${renderMd(data.executiveSummary)}</p>
             </div>
 
             ${section("Decisions",    "#7c3aed", "#f5f3ff", data.decisions)}
@@ -108,13 +118,15 @@ export async function POST(req: NextRequest) {
 
   const html = buildHtml({ title, date, attendees, executiveSummary, decisions, actionItems, nextSteps });
 
+  let provider = "unknown";
   try {
-    await sendEmail({
+    const result = await sendEmail({
       to:      toList.join(", "),
       subject: String(subject),
       html,
       ...(ccList.length > 0 ? { cc: ccList.join(", ") } : {}),
     });
+    provider = result.provider;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "SMTP error";
     console.error("[EMAIL]", message);
@@ -135,5 +147,5 @@ export async function POST(req: NextRequest) {
       .catch((e: unknown) => console.error("[EMAIL] db update failed:", e));
   }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, provider });
 }
