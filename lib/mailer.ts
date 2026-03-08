@@ -17,7 +17,9 @@ export async function sendEmail({
     secure: process.env.SMTP_SECURE === "true",
     auth: {
       user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
+      pass: process.env.SMTP_PASS_B64
+        ? Buffer.from(process.env.SMTP_PASS_B64, "base64").toString("utf8")
+        : process.env.SMTP_PASS,
     },
   });
 
