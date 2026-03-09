@@ -1,50 +1,52 @@
 "use client";
 
 import { useState }             from "react";
-import { Send, Loader2, Check, Mail, Users, AtSign, Paperclip } from "lucide-react";
+import { Send, Loader2, Check, Mail, Users, AtSign, Paperclip, X, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { cn }                   from "@/lib/utils";
 import { fieldCls, FieldError } from "@/components/ui/form";
-import { Toast }                from "@/components/shared/Toast";
 import type { Summary, MeetingMeta } from "@/types/meeting";
 
-type ToastState = { message: string; type: "success" | "error" } | null;
+type DeliveryStatus = {
+  ok:       boolean;
+  accepted: number;
+  rejected: number;
+  error?:   string;
+  time:     string;
+} | null;
 
 interface Props {
-  defaultSubject:  string;
-  defaultTo:       string;
-  summaryId:       string | null;
-  summary:         Summary;
-  meta:            MeetingMeta;
+  defaultSubject:   string;
+  defaultTo:        string;
+  summaryId:        string | null;
+  summary:          Summary;
+  meta:             MeetingMeta;
   attachmentNames?: string[];
 }
 
 export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, meta, attachmentNames }: Props) {
-  const [subject,   setSubject]   = useState(defaultSubject);
-  const [cc,        setCc]        = useState("");
-  const [isSending, setIsSending] = useState(false);
-  const [sent,      setSent]      = useState(false);
-  const [toast,     setToast]     = useState<ToastState>(null);
-  const [ccError,   setCcError]   = useState("");
-  const [subjectError, setSubjectError] = useState("");
+  const [subject,    setSubject]    = useState(defaultSubject);
+  const [cc,         setCc]         = useState("");
+  const [isSending,  setIsSending]  = useState(false);
+  const [sent,       setSent]       = useState(false);
+  const [delivery,   setDelivery]   = useState<DeliveryStatus>(null);
+  const [subjectErr, setSubjectErr] = useState("");
 
   const recipientCount = defaultTo
     ? defaultTo.split(",").map((e) => e.trim()).filter(Boolean).length
     : 0;
 
   const handleSend = async () => {
-    let valid = true;
-    if (!subject.trim()) { setSubjectError("Subject is required"); valid = false; }
-    else setSubjectError("");
-
+    if (!subject.trim()) { setSubjectErr("Subject is required"); return; }
+    setSubjectErr("");
     if (!defaultTo.trim()) {
-      setToast({ message: "Add attendee emails in the form above first.", type: "error" });
+      setDelivery({ ok: false, accepted: 0, rejected: 0, error: "Add attendee emails in the form above first.", time: now() });
       return;
     }
-    if (!valid) return;
 
     setIsSending(true);
+    setDelivery(null);
     try {
-      const res = await fetch("/api/email", {
+      const res  = await fetch("/api/email", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -61,16 +63,20 @@ export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, me
           nextSteps:        summary.nextSteps,
         }),
       });
-
       const json = await res.json();
       if (!res.ok) {
-        setToast({ message: json.error ?? "Failed to send email", type: "error" });
-        return;
+        setDelivery({ ok: false, accepted: 0, rejected: recipientCount, error: json.error ?? "Failed to send", time: now() });
+      } else {
+        setSent(true);
+        setDelivery({
+          ok:       true,
+          accepted: json.accepted?.length ?? recipientCount,
+          rejected: json.rejected?.length ?? 0,
+          time:     now(),
+        });
       }
-      setSent(true);
-      setToast({ message: "Meeting brief sent to all attendees.", type: "success" });
     } catch {
-      setToast({ message: "Network error — please try again", type: "error" });
+      setDelivery({ ok: false, accepted: 0, rejected: recipientCount, error: "Network error — please try again", time: now() });
     } finally {
       setIsSending(false);
     }
@@ -115,16 +121,14 @@ export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, me
 
           {/* Subject */}
           <div className="space-y-1.5">
-            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest">
-              Subject
-            </label>
+            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-widest">Subject</label>
             <input
               type="text"
               value={subject}
-              onChange={(e) => { setSubject(e.target.value); setSubjectError(""); }}
-              className={fieldCls("focus:ring-emerald-400", subjectError)}
+              onChange={(e) => { setSubject(e.target.value); setSubjectErr(""); }}
+              className={fieldCls("focus:ring-emerald-400", subjectErr)}
             />
-            <FieldError msg={subjectError} />
+            <FieldError msg={subjectErr} />
           </div>
 
           {/* CC */}
@@ -135,11 +139,10 @@ export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, me
             <input
               type="text"
               value={cc}
-              onChange={(e) => { setCc(e.target.value); setCcError(""); }}
+              onChange={(e) => setCc(e.target.value)}
               placeholder="manager@company.com"
-              className={fieldCls("focus:ring-emerald-400", ccError)}
+              className={fieldCls("focus:ring-emerald-400")}
             />
-            <FieldError msg={ccError} />
           </div>
 
           {/* Send button */}
@@ -148,7 +151,7 @@ export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, me
               <div className="flex items-center gap-2 text-sm font-semibold text-emerald-600">
                 <Check className="w-4 h-4" /> Brief sent!
                 <button
-                  onClick={() => setSent(false)}
+                  onClick={() => { setSent(false); setDelivery(null); }}
                   className="ml-2 text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2"
                 >
                   Send again
@@ -174,9 +177,41 @@ export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, me
         </div>
       </div>
 
-      {toast && (
-        <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />
+      {/* ── Delivery status — fixed bottom left ─────────────── */}
+      {delivery && (
+        <div className={cn(
+          "fixed bottom-4 left-4 z-50 flex items-start gap-3 rounded-2xl shadow-xl border px-4 py-3 w-72",
+          delivery.ok ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"
+        )}>
+          {delivery.ok
+            ? <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+            : <AlertCircle  className="w-5 h-5 text-red-500    shrink-0 mt-0.5" />
+          }
+          <div className="flex-1 min-w-0">
+            <p className={cn("text-sm font-bold", delivery.ok ? "text-emerald-700" : "text-red-700")}>
+              {delivery.ok ? "Brief delivered" : "Delivery failed"}
+            </p>
+            {delivery.ok ? (
+              <p className="text-[11px] text-emerald-600 mt-0.5">
+                ✓ {delivery.accepted} recipient{delivery.accepted !== 1 ? "s" : ""} received
+                {delivery.rejected > 0 && ` · ${delivery.rejected} rejected`}
+              </p>
+            ) : (
+              <p className="text-[11px] text-red-500 mt-0.5 break-words">{delivery.error}</p>
+            )}
+            <p className="flex items-center gap-1 text-[10px] text-gray-400 mt-1">
+              <Clock className="w-3 h-3" /> {delivery.time}
+            </p>
+          </div>
+          <button onClick={() => setDelivery(null)} className="text-gray-400 hover:text-gray-600 shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       )}
     </>
   );
+}
+
+function now() {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }

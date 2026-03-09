@@ -118,6 +118,8 @@ export async function POST(req: NextRequest) {
 
   const html = buildHtml({ title, date, attendees, executiveSummary, decisions, actionItems, nextSteps });
 
+  let accepted: string[] = [];
+  let rejected: string[] = [];
   let provider = "unknown";
   try {
     const result = await sendEmail({
@@ -127,10 +129,12 @@ export async function POST(req: NextRequest) {
       ...(ccList.length > 0 ? { cc: ccList.join(", ") } : {}),
     });
     provider = result.provider;
+    accepted = result.accepted;
+    rejected = result.rejected;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "SMTP error";
     console.error("[EMAIL]", message);
-    return NextResponse.json({ error: `Failed to send email: ${message}` }, { status: 502 });
+    return NextResponse.json({ error: `Failed to send: ${message}` }, { status: 502 });
   }
 
   // Update DB — non-blocking
@@ -147,5 +151,5 @@ export async function POST(req: NextRequest) {
       .catch((e: unknown) => console.error("[EMAIL] db update failed:", e));
   }
 
-  return NextResponse.json({ success: true, provider });
+  return NextResponse.json({ success: true, provider, accepted, rejected });
 }
