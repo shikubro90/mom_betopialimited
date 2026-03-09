@@ -22,6 +22,26 @@ async function readTextFiles(files: File[]): Promise<string> {
   return texts.join("");
 }
 
+function getFingerprint(): string {
+  try {
+    const raw = [
+      navigator.userAgent,
+      `${screen.width}x${screen.height}`,
+      navigator.language,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+      navigator.platform,
+      String(screen.colorDepth),
+    ].join("|");
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) {
+      hash = Math.imul(31, hash) + raw.charCodeAt(i) | 0;
+    }
+    return Math.abs(hash).toString(36);
+  } catch {
+    return "unknown";
+  }
+}
+
 async function generateSummary(data: MeetingFormData, files: File[]): Promise<SummarizeResult> {
   const fileText = await readTextFiles(files);
   const rawInput = data.notes + fileText;
@@ -30,11 +50,12 @@ async function generateSummary(data: MeetingFormData, files: File[]): Promise<Su
     method:  "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      title:     data.title,
-      date:      data.date,
-      attendees: data.attendees,
+      title:       data.title,
+      date:        data.date,
+      attendees:   data.attendees,
       rawInput,
-      tone:      data.tone,
+      tone:        data.tone,
+      fingerprint: getFingerprint(),
     }),
   });
 

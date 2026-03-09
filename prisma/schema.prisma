@@ -23,6 +23,17 @@ enum Role {
   ADMIN
 }
 
+model AiUsage {
+  id          String   @id @default(cuid())
+  fingerprint String
+  ip          String
+  count       Int      @default(1)
+  windowStart DateTime @default(now())
+
+  @@unique([fingerprint, ip])
+  @@map("ai_usage")
+}
+
 model MeetingSummary {
   id               String   @id @default(cuid())
   title            String

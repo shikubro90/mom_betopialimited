@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { openai }               from "@/lib/openai";
 import { db }                   from "@/lib/db";
 import { summarizeBodySchema }  from "@/lib/validations";
+import { checkAiRateLimit }     from "@/lib/rateLimit";
 
 /* ─── Tone descriptions ───────────────────────────────────── */
 const TONE_MAP: Record<string, string> = {
@@ -69,7 +70,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "OpenAI API key not configured. Add OPENAI_API_KEY to your .env file." }, { status: 503 });
   }
 
-  const { title, date, attendees, rawInput, tone } = parsed.data;
+  const { title, date, attendees, rawInput, tone, fingerprint } = parsed.data;
+
+  // Rate limit AI usage per device fingerprint + IP
+  const ip     = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+              ?? req.headers.get("x-real-ip")
+              ?? "unknown";
+  const rl = await checkAiRateLimit(fingerprint, ip);
+  if (!rl.allowed) {
+    const resetIn = Math.ceil((rl.resetAt.getTime() - Date.now()) / 3_600_000);
+    return NextResponse.json(
+      { error: `AI summary limit reached (10/day). Resets in ~${resetIn}h. Manual mode is unlimited.` },
+      { status: 429 }
+    );
+  }
 
   try {
     const completion = await openai.chat.completions.create({
