@@ -12,16 +12,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Merge shiku into prod
         run: |
           git config user.email "ci@meetbrief.com"
           git config user.name "CI Bot"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
           git checkout prod
           git merge shiku --no-edit
           git push origin prod
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
