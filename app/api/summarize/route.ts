@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { openai }               from "@/lib/openai";
 import { db }                   from "@/lib/db";
 import { summarizeBodySchema }  from "@/lib/validations";
-import { checkAiRateLimit }     from "@/lib/rateLimit";
+import { checkGuestRateLimit }  from "@/lib/rateLimit";
 
 /* ─── Tone descriptions ───────────────────────────────────── */
 const TONE_MAP: Record<string, string> = {
@@ -72,17 +72,15 @@ export async function POST(req: NextRequest) {
 
   const { title, date, attendees, rawInput, tone, fingerprint } = parsed.data;
 
-  // Rate limit AI usage per device fingerprint + IP
-  const ip     = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-              ?? req.headers.get("x-real-ip")
-              ?? "unknown";
-  const rl = await checkAiRateLimit(fingerprint, ip);
+  // Rate limit — guest: 3/2h, registered: 10/1h (TODO: pass userId when auth added)
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+          ?? req.headers.get("x-real-ip")
+          ?? "unknown";
+  const ua = req.headers.get("user-agent") ?? undefined;
+
+  const rl = await checkGuestRateLimit(fingerprint, ip, ua);
   if (!rl.allowed) {
-    const resetIn = Math.ceil((rl.resetAt.getTime() - Date.now()) / 3_600_000);
-    return NextResponse.json(
-      { error: `AI summary limit reached (10/day). Resets in ~${resetIn}h. Manual mode is unlimited.` },
-      { status: 429 }
-    );
+    return NextResponse.json({ error: rl.message }, { status: 429 });
   }
 
   try {
@@ -129,6 +127,21 @@ export async function POST(req: NextRequest) {
       summaryId = record.id;
     } catch (e: unknown) {
       console.error("[SUMMARIZE] db save failed:", e);
+    }
+
+    // Log token usage (fire-and-forget)
+    const usage = completion.usage;
+    if (usage) {
+      db.tokenUsageLog.create({
+        data: {
+          fingerprint,
+          model:        "gpt-4o-mini",
+          promptTokens: usage.prompt_tokens,
+          outputTokens: usage.completion_tokens,
+          totalTokens:  usage.total_tokens,
+          summaryId,
+        },
+      }).catch((e: unknown) => console.error("[TOKEN LOG]", e));
     }
 
     return NextResponse.json({ ...result, id: summaryId });
