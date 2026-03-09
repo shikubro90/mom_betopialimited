@@ -29,29 +29,33 @@ function makeGmail() {
   });
 }
 
-/** Verify SMTP auth then send. Returns true on success. */
+// These domains block SES/MS365 IPs — must go via Gmail
+const GMAIL_ONLY_DOMAINS = ["betopiagroup.com"];
+
+function splitRecipients(emails: string): { standard: string[]; gmailOnly: string[] } {
+  const standard:  string[] = [];
+  const gmailOnly: string[] = [];
+  for (const email of emails.split(",").map((e) => e.trim()).filter(Boolean)) {
+    const domain = email.split("@")[1]?.toLowerCase() ?? "";
+    if (GMAIL_ONLY_DOMAINS.includes(domain)) gmailOnly.push(email);
+    else standard.push(email);
+  }
+  return { standard, gmailOnly };
+}
+
 async function trySend(
   transport: nodemailer.Transporter,
   message:   object,
   label:     string,
   retries  = 2,
 ): Promise<boolean> {
-  // Fast-fail: verify auth before attempting send
-  try {
-    await transport.verify();
-  } catch (err) {
-    console.warn(`[MAILER] ✗ ${label} auth verify failed:`, (err as Error).message);
-    return false;
-  }
-
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       await transport.sendMail(message);
       console.log(`[MAILER] ✓ ${label}${attempt > 1 ? ` (attempt ${attempt})` : ""}`);
       return true;
     } catch (err) {
-      const msg = (err as Error).message;
-      console.warn(`[MAILER] ✗ ${label} attempt ${attempt}/${retries}:`, msg);
+      console.warn(`[MAILER] ✗ ${label} attempt ${attempt}/${retries}:`, (err as Error).message);
       if (attempt < retries) await new Promise((r) => setTimeout(r, 1500 * attempt));
     }
   }
@@ -69,36 +73,47 @@ export async function sendEmail({
   subject: string;
   html:    string;
 }): Promise<MailResult> {
-  const toList = to.split(",").map((e) => e.trim()).filter(Boolean);
-  const ccList = cc ? cc.split(",").map((e) => e.trim()).filter(Boolean) : [];
+  const { standard: toStd, gmailOnly: toGmail } = splitRecipients(to);
+  const { standard: ccStd, gmailOnly: ccGmail }  = cc
+    ? splitRecipients(cc)
+    : { standard: [], gmailOnly: [] };
 
-  if (toList.length === 0) throw new Error("No recipients");
+  const providers: string[] = [];
 
-  const sesMsgBase = {
-    from:    `"${process.env.SES_FROM_NAME}"  <${process.env.SES_FROM_EMAIL}>`,
-    to:      toList.join(", "),
-    cc:      ccList.length > 0 ? ccList.join(", ") : undefined,
-    subject, html,
-  };
+  // ── Standard recipients: SES → Gmail fallback ────────────────────────────
+  if (toStd.length > 0 || ccStd.length > 0) {
+    const sesMsg = {
+      from:    `"${process.env.SES_FROM_NAME}" <${process.env.SES_FROM_EMAIL}>`,
+      to:      toStd.join(", ") || undefined,
+      cc:      ccStd.length > 0 ? ccStd.join(", ") : undefined,
+      subject, html,
+    };
+    const gmailMsg = {
+      ...sesMsg,
+      from:    `"${process.env.SMTP_FROM_NAME}" <${process.env.SMTP_FROM_EMAIL}>`,
+      replyTo: process.env.SES_FROM_EMAIL,
+    };
 
-  const gmailMsgBase = {
-    from:    `"${process.env.SMTP_FROM_NAME}" <${process.env.SMTP_FROM_EMAIL}>`,
-    replyTo: process.env.SES_FROM_EMAIL,
-    to:      toList.join(", "),
-    cc:      ccList.length > 0 ? ccList.join(", ") : undefined,
-    subject, html,
-  };
-
-  // ── Primary: AWS SES ─────────────────────────────────────────────────────
-  if (await trySend(makeSes(), sesMsgBase, "AWS SES", 2)) {
-    return { provider: "AWS SES" };
+    if      (await trySend(makeSes(),   sesMsg,   "AWS SES"))     providers.push("AWS SES");
+    else if (await trySend(makeGmail(), gmailMsg, "Gmail"))        providers.push("Gmail");
+    else throw new Error("Both SES and Gmail failed for standard recipients");
   }
 
-  // ── Fallback: Gmail ──────────────────────────────────────────────────────
-  console.warn("[MAILER] SES failed — falling back to Gmail");
-  if (await trySend(makeGmail(), gmailMsgBase, "Gmail", 3)) {
-    return { provider: "Gmail" };
+  // ── betopiagroup.com and similar: Gmail only (SES/MS365 IPs blocked) ─────
+  if (toGmail.length > 0 || ccGmail.length > 0) {
+    const gmailMsg = {
+      from:    `"${process.env.SMTP_FROM_NAME}" <${process.env.SMTP_FROM_EMAIL}>`,
+      replyTo: process.env.SES_FROM_EMAIL,
+      to:      toGmail.join(", ") || undefined,
+      cc:      ccGmail.length > 0 ? ccGmail.join(", ") : undefined,
+      subject, html,
+    };
+    if (await trySend(makeGmail(), gmailMsg, "Gmail (betopiagroup route)", 3)) {
+      providers.push("Gmail");
+    } else {
+      throw new Error("Gmail failed for betopiagroup route after 3 attempts");
+    }
   }
 
-  throw new Error("All providers failed. Check SES_USER/SES_PASS and SMTP_USER/SMTP_PASS in .env");
+  return { provider: providers.join(" + ") };
 }
