@@ -7,22 +7,125 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  role      Role     @default(USER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("users")
-}
-
+// ─── Enums ────────────────────────────────────────────────
 enum Role {
   USER
   ADMIN
 }
 
+// ─── Users ────────────────────────────────────────────────
+// Registered users. Only emails from allowed_domains can register.
+model User {
+  id             String         @id @default(cuid())
+  email          String         @unique
+  name           String?
+  passwordHash   String?                        // null for admin/OAuth users
+  role           Role           @default(USER)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  aiUsage        AiUsageLog?
+  tokenUsageLogs TokenUsageLog[]
+
+  @@map("users")
+}
+
+// ─── Allowed Domains ──────────────────────────────────────
+// Only emails from these domains can register.
+model AllowedDomain {
+  id        String   @id @default(cuid())
+  domain    String   @unique          // e.g. "betopialimited.com"
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("allowed_domains")
+}
+
+// ─── Device Fingerprints ──────────────────────────────────
+// Tracks anonymous (guest) devices for rate limiting.
+model DeviceFingerprint {
+  id          String   @id @default(cuid())
+  fingerprint String                         // hash of browser signals
+  ip          String
+  userAgent   String?  @db.Text
+  browser     String?
+  os          String?
+  platform    String?
+  firstSeen   DateTime @default(now())
+  lastSeen    DateTime @updatedAt
+
+  aiUsage     AiUsageLog?
+
+  @@unique([fingerprint, ip])
+  @@map("device_fingerprints")
+}
+
+// ─── AI Usage Log ─────────────────────────────────────────
+// One row per user (registered) OR per device (guest).
+// Tracks usage within a rolling window + blockedUntil.
+//
+// Guest limits:      3 calls / 2-hour window
+// Registered limits: 10 calls / 1-hour window
+model AiUsageLog {
+  id           String             @id @default(cuid())
+
+  // Registered user path
+  userId       String?            @unique
+  user         User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Guest path
+  deviceId     String?            @unique
+  device       DeviceFingerprint? @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  count        Int                @default(0)
+  windowStart  DateTime           @default(now())
+  blockedUntil DateTime?          // set when limit hit, cleared after block expires
+
+  @@map("ai_usage_logs")
+}
+
+// ─── Token Usage Logs ─────────────────────────────────────
+// One row per AI summarize call. Useful for cost tracking.
+model TokenUsageLog {
+  id           String   @id @default(cuid())
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  fingerprint  String?                        // guest identifier
+  model        String   @default("gpt-4o-mini")
+  promptTokens Int      @default(0)
+  outputTokens Int      @default(0)
+  totalTokens  Int      @default(0)
+  summaryId    String?                        // links to MeetingSummary.id
+  createdAt    DateTime @default(now())
+
+  @@map("token_usage_logs")
+}
+
+// ─── Employee Directory ───────────────────────────────────
+// Imported employee data (CSV/manual upload).
+model EmployeeDirectory {
+  id         String   @id @default(cuid())
+  name       String
+  email      String   @unique
+  department String?
+  jobTitle   String?
+  uploadedAt DateTime @default(now())
+
+  @@map("employee_directory")
+}
+
+// ─── System Settings ──────────────────────────────────────
+// Key-value config. Admin-editable without code deploys.
+// e.g. key="guest_ai_limit" value="3"
+model SystemSetting {
+  key       String   @id
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+// ─── Meeting Summaries ────────────────────────────────────
 model MeetingSummary {
   id               String   @id @default(cuid())
   title            String

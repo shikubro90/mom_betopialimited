@@ -5,6 +5,8 @@ export interface MeetingFormData {
   attendeeEmails: string;
   notes:          string;
   tone:           string;
+  mode:           "ai" | "manual";
+  attachmentNames: string[];
 }
 
 export interface Summary {
@@ -22,6 +24,7 @@ export interface MeetingMeta {
 }
 
 export interface SummarizeResult {
-  summary: Summary;
-  id:      string | null;
+  summary:   Summary;
+  id:        string | null;
+  remaining: number;         // AI calls left in current window
 }

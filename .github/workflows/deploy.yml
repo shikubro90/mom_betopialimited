@@ -3,26 +3,12 @@ name: Deploy to Production
 on:
   push:
     branches:
-      - shiku
+      - prod
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Merge shiku into prod
-        run: |
-          git config user.email "ci@meetbrief.com"
-          git config user.name "CI Bot"
-          git checkout prod
-          git merge shiku --no-edit
-          git push origin prod
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -32,6 +18,8 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           script: |
             cd /var/www/meetbrief
+            git fetch origin
+            git checkout prod
             git pull origin prod
             npm install --production=false
             npm run build

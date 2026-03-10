@@ -26,11 +26,12 @@ const optionalEmailList = z.string().refine(
 
 /* ─── API request schemas ────────────────────────────────── */
 export const summarizeBodySchema = z.object({
-  title:     z.string().min(2,  "Title must be at least 2 characters"),
-  rawInput:  z.string().min(20, "Notes must be at least 20 characters"),
-  date:      z.string().optional().default(""),
-  attendees: z.string().optional().default(""),
-  tone:      z.string().optional().default("professional"),
+  title:       z.string().min(2,  "Title must be at least 2 characters"),
+  rawInput:    z.string().min(20, "Notes must be at least 20 characters"),
+  date:        z.string().optional().default(""),
+  attendees:   z.string().optional().default(""),
+  tone:        z.string().optional().default("professional"),
+  fingerprint: z.string().optional().default("unknown"),
 });
 
 export const emailBodySchema = z.object({

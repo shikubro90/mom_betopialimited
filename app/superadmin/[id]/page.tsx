@@ -93,7 +93,7 @@ export default async function SummaryDetailPage({
 
       {/* Back */}
       <Link
-        href="/admin"
+        href="/superadmin"
         className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors"
       >
         <ArrowLeft className="w-4 h-4" /> Back to list
