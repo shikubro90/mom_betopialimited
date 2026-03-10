@@ -35,7 +35,7 @@ export default function AdminLoginPage() {
         return;
       }
 
-      router.push("/admin");
+      router.push("/superadmin");
       router.refresh();
     } catch {
       setError("Network error — please try again");

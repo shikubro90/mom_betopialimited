@@ -1,13 +1,62 @@
 "use client";
 
-import { useState } from "react";
-import { Navbar }       from "@/components/home/Navbar";
-import { MeetingForm }  from "@/components/home/MeetingForm";
-import { SummaryCard }  from "@/components/home/SummaryCard";
-import { SendBriefBar } from "@/components/home/SendBriefBar";
-import { Toast }        from "@/components/shared/Toast";
+import { useState }          from "react";
+import Link                   from "next/link";
+import { Navbar }             from "@/components/home/Navbar";
+import { MeetingForm }        from "@/components/home/MeetingForm";
+import { SummaryCard }        from "@/components/home/SummaryCard";
+import { SendBriefBar }       from "@/components/home/SendBriefBar";
+import { Toast }              from "@/components/shared/Toast";
+import { LogIn, UserPlus, X } from "lucide-react";
 import type { MeetingFormData, Summary, MeetingMeta, SummarizeResult } from "@/types/meeting";
 
+/* ── Rate-limit modal ─────────────────────────────────────── */
+function GuestLimitModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+      {/* backdrop */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+
+      <div className="relative w-full max-w-sm rounded-2xl border border-white/10 bg-[#0f0f14] shadow-2xl p-6 text-white">
+        {/* close */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-500 hover:text-gray-300 transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        {/* top gradient line */}
+        <div className="h-[2px] w-full rounded-full bg-gradient-to-r from-brand-500 to-purple-500 mb-5" />
+
+        <h2 className="text-lg font-bold mb-1">Free AI limit reached</h2>
+        <p className="text-sm text-gray-400 leading-relaxed mb-6">
+          You&apos;ve used all 3 free AI summaries. Login or register with your work email
+          to get <span className="text-white font-semibold">10 AI summaries per hour</span>.
+        </p>
+
+        <div className="flex flex-col gap-3">
+          <Link
+            href="/login"
+            className="flex items-center justify-center gap-2 rounded-xl py-2.5 px-4 text-sm font-semibold bg-brand-600 hover:bg-brand-500 transition-colors"
+          >
+            <LogIn className="w-4 h-4" />
+            Sign in
+          </Link>
+          <Link
+            href="/register"
+            className="flex items-center justify-center gap-2 rounded-xl py-2.5 px-4 text-sm font-semibold border border-white/10 hover:bg-white/5 transition-colors"
+          >
+            <UserPlus className="w-4 h-4" />
+            Create account
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Helpers ──────────────────────────────────────────────── */
 async function readTextFiles(files: File[]): Promise<string> {
   const textTypes = ["text/plain", "text/markdown", "text/csv", "application/json"];
   const texts: string[] = [];
@@ -42,7 +91,7 @@ function getFingerprint(): string {
   }
 }
 
-async function generateSummary(data: MeetingFormData, files: File[]): Promise<SummarizeResult> {
+async function generateSummary(data: MeetingFormData, files: File[]): Promise<SummarizeResult & { limitReached?: boolean }> {
   const fileText = await readTextFiles(files);
   const rawInput = data.notes + fileText;
 
@@ -60,7 +109,19 @@ async function generateSummary(data: MeetingFormData, files: File[]): Promise<Su
   });
 
   const json = await res.json();
-  if (!res.ok) throw new Error(json.error ?? "Summarization failed");
+
+  if (!res.ok) {
+    if (res.status === 429 && json.code === "GUEST_AI_LIMIT_REACHED") {
+      // Signal to caller to show modal instead of toast
+      const err = new Error(json.message) as Error & { limitReached: boolean };
+      err.limitReached = true;
+      throw err;
+    }
+    if (res.status === 429 && json.code === "USER_AI_LIMIT_REACHED") {
+      throw new Error(json.message ?? "AI summary limit reached. Please try again later.");
+    }
+    throw new Error(json.error ?? "Summarization failed");
+  }
 
   return {
     summary: {
@@ -70,21 +131,25 @@ async function generateSummary(data: MeetingFormData, files: File[]): Promise<Su
       nextSteps:        json.nextSteps,
       gist:             json.shortGist,
     },
-    id: json.id ?? null,
+    id:        json.id        ?? null,
+    remaining: json.remaining ?? 0,
   };
 }
 
+/* ── Page ─────────────────────────────────────────────────── */
 export default function HomePage() {
-  const [summary,        setSummary]        = useState<Summary | null>(null);
-  const [currentSummary, setCurrentSummary] = useState<Summary | null>(null);
-  const [summaryId,      setSummaryId]      = useState<string | null>(null);
-  const [summaryKey,     setSummaryKey]     = useState(0);
-  const [meetingMeta,    setMeetingMeta]    = useState<MeetingMeta>({ title: "", date: "", attendees: "" });
-  const [attendeeEmails, setAttendeeEmails] = useState("");
+  const [summary,         setSummary]         = useState<Summary | null>(null);
+  const [currentSummary,  setCurrentSummary]  = useState<Summary | null>(null);
+  const [summaryId,       setSummaryId]       = useState<string | null>(null);
+  const [summaryKey,      setSummaryKey]      = useState(0);
+  const [meetingMeta,     setMeetingMeta]     = useState<MeetingMeta>({ title: "", date: "", attendees: "" });
+  const [attendeeEmails,  setAttendeeEmails]  = useState("");
   const [attachmentNames, setAttachmentNames] = useState<string[]>([]);
-  const [isLoading,      setIsLoading]      = useState(false);
-  const [error,          setError]          = useState<string | null>(null);
-  const [manualMode,     setManualMode]     = useState(false);
+  const [isLoading,       setIsLoading]       = useState(false);
+  const [error,           setError]           = useState<string | null>(null);
+  const [warning,         setWarning]         = useState<string | null>(null);
+  const [showLimitModal,  setShowLimitModal]  = useState(false);
+  const [manualMode,      setManualMode]      = useState(false);
 
   const handleSummarize = async (data: MeetingFormData, files: File[]) => {
     setIsLoading(true);
@@ -98,7 +163,6 @@ export default function HomePage() {
     setSummaryKey((k) => k + 1);
 
     if (data.mode === "manual") {
-      // Skip AI — show empty editable card
       const empty: Summary = {
         executiveSummary: "",
         decisions:        [""],
@@ -113,24 +177,33 @@ export default function HomePage() {
     }
 
     try {
-      const { summary: result, id } = await generateSummary(data, files);
+      const { summary: result, id, remaining } = await generateSummary(data, files);
       setSummary(result);
       setCurrentSummary(result);
       setSummaryId(id);
+      if (remaining === 1) {
+        setWarning("You have 1 free AI summary left. Login or register to get 10/hour.");
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      const e = err as Error & { limitReached?: boolean };
+      if (e.limitReached) {
+        setShowLimitModal(true);
+      } else {
+        setError(e.message || "Something went wrong");
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSummaryChange = (updated: Summary) => {
-    setCurrentSummary(updated);
-  };
+  const handleSummaryChange = (updated: Summary) => setCurrentSummary(updated);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
       <Navbar />
+
+      {/* Rate-limit modal */}
+      {showLimitModal && <GuestLimitModal onClose={() => setShowLimitModal(false)} />}
 
       {/* ── Hero ──────────────────────────────────────────── */}
       <section className="relative overflow-hidden pt-14 pb-10 px-4">
@@ -185,6 +258,10 @@ export default function HomePage() {
       {/* ── Cards ─────────────────────────────────────────── */}
       <section className="max-w-3xl mx-auto px-4 pb-24 space-y-6">
         <MeetingForm onSubmit={handleSummarize} isLoading={isLoading} />
+
+        {warning && (
+          <Toast type="warning" message={warning} onClose={() => setWarning(null)} />
+        )}
 
         {error && (
           <Toast type="error" message={error} onClose={() => setError(null)} />

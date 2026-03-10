@@ -1,15 +1,20 @@
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
-import { cookies }           from "next/headers";
+import { cookies } from "next/headers";
 
-export const COOKIE_NAME = "mb_admin_token";
+export const COOKIE_NAME = "mb_session";
 
 const secret = () => new TextEncoder().encode(process.env.SESSION_SECRET);
 
-export interface AdminSession extends JWTPayload {
-  email: string;
+export interface UserSession extends JWTPayload {
+  email:   string;
+  userId?: string;
+  role?:   "USER" | "ADMIN";
 }
 
-export async function createSessionToken(payload: AdminSession) {
+/** Alias kept for admin login compatibility */
+export type AdminSession = UserSession;
+
+export async function createSessionToken(payload: UserSession): Promise<string> {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -17,13 +22,15 @@ export async function createSessionToken(payload: AdminSession) {
     .sign(secret());
 }
 
-export async function verifySessionToken(token: string): Promise<AdminSession> {
+export async function verifySessionToken(token: string): Promise<UserSession> {
   const { payload } = await jwtVerify(token, secret());
-  return payload as unknown as AdminSession;
+  return payload as unknown as UserSession;
 }
 
-export async function getSession(): Promise<AdminSession | null> {
-  const token = (await cookies()).get(COOKIE_NAME)?.value;
+export async function getSession(): Promise<UserSession | null> {
+  const jar   = await cookies();
+  // Support old cookie name from admin login
+  const token = jar.get(COOKIE_NAME)?.value ?? jar.get("mb_admin_token")?.value;
   if (!token) return null;
   try {
     return await verifySessionToken(token);

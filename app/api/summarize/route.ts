@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openai }               from "@/lib/openai";
-import { db }                   from "@/lib/db";
-import { summarizeBodySchema }  from "@/lib/validations";
-import { checkGuestRateLimit }  from "@/lib/rateLimit";
+import { openai }              from "@/lib/openai";
+import { db }                  from "@/lib/db";
+import { summarizeBodySchema } from "@/lib/validations";
+import { checkAiQuota }        from "@/lib/quota";
 
 /* ─── Tone descriptions ───────────────────────────────────── */
 const TONE_MAP: Record<string, string> = {
@@ -67,21 +67,22 @@ export async function POST(req: NextRequest) {
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json({ error: "OpenAI API key not configured. Add OPENAI_API_KEY to your .env file." }, { status: 503 });
+    return NextResponse.json(
+      { error: "OpenAI API key not configured. Add OPENAI_API_KEY to your .env file." },
+      { status: 503 }
+    );
   }
 
-  const { title, date, attendees, rawInput, tone, fingerprint } = parsed.data;
-
-  // Rate limit — guest: 3/2h, registered: 10/1h (TODO: pass userId when auth added)
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-          ?? req.headers.get("x-real-ip")
-          ?? "unknown";
-  const ua = req.headers.get("user-agent") ?? undefined;
-
-  const rl = await checkGuestRateLimit(fingerprint, ip, ua);
-  if (!rl.allowed) {
-    return NextResponse.json({ error: rl.message }, { status: 429 });
+  // ── Quota check (guest: 3/2h · user: 10/1h) ───────────────
+  const quota = await checkAiQuota(req);
+  if (!quota.allowed) {
+    return NextResponse.json(quota.error, {
+      status:  429,
+      headers: { "Retry-After": String(quota.error.retryAfterSeconds) },
+    });
   }
+
+  const { title, date, attendees, rawInput, tone } = parsed.data;
 
   try {
     const completion = await openai.chat.completions.create({
@@ -94,24 +95,24 @@ export async function POST(req: NextRequest) {
 
     const raw = completion.choices[0].message.content ?? "{}";
 
-    let parsed: Record<string, unknown>;
+    let result: Record<string, unknown>;
     try {
-      parsed = JSON.parse(raw);
+      result = JSON.parse(raw);
     } catch {
       console.error("[SUMMARIZE] JSON parse failed:", raw);
       return NextResponse.json({ error: "Model returned malformed JSON" }, { status: 502 });
     }
 
     // Normalise — ensure arrays are arrays
-    const result = {
-      executiveSummary: String(parsed.executiveSummary ?? ""),
-      decisions:        Array.isArray(parsed.decisions)   ? parsed.decisions   : [],
-      actionItems:      Array.isArray(parsed.actionItems) ? parsed.actionItems : [],
-      nextSteps:        Array.isArray(parsed.nextSteps)   ? parsed.nextSteps   : [],
-      shortGist:        String(parsed.shortGist ?? ""),
+    const summary = {
+      executiveSummary: String(result.executiveSummary ?? ""),
+      decisions:        Array.isArray(result.decisions)   ? result.decisions   : [],
+      actionItems:      Array.isArray(result.actionItems) ? result.actionItems : [],
+      nextSteps:        Array.isArray(result.nextSteps)   ? result.nextSteps   : [],
+      shortGist:        String(result.shortGist ?? ""),
     };
 
-    // Persist — awaited so we can return the record id
+    // Persist summary
     let summaryId: string | null = null;
     try {
       const record = await db.meetingSummary.create({
@@ -121,7 +122,7 @@ export async function POST(req: NextRequest) {
           attendees: attendees || null,
           rawInput,
           tone,
-          ...result,
+          ...summary,
         },
       });
       summaryId = record.id;
@@ -130,11 +131,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Log token usage (fire-and-forget)
-    const usage = completion.usage;
+    const usage      = completion.usage;
+    const identity   = quota.identity;
     if (usage) {
       db.tokenUsageLog.create({
         data: {
-          fingerprint,
+          userId:       identity.kind === "user"  ? identity.userId      : undefined,
+          fingerprint:  identity.kind === "guest" ? identity.fingerprint : undefined,
           model:        "gpt-4o-mini",
           promptTokens: usage.prompt_tokens,
           outputTokens: usage.completion_tokens,
@@ -144,10 +147,9 @@ export async function POST(req: NextRequest) {
       }).catch((e: unknown) => console.error("[TOKEN LOG]", e));
     }
 
-    return NextResponse.json({ ...result, id: summaryId });
+    return NextResponse.json({ ...summary, id: summaryId, remaining: quota.remaining });
   } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : "OpenAI request failed";
+    const message = err instanceof Error ? err.message : "OpenAI request failed";
     console.error("[SUMMARIZE]", message);
     return NextResponse.json({ error: message }, { status: 502 });
   }
