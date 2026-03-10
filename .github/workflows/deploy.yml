@@ -3,7 +3,7 @@ name: Deploy to Production
 on:
   push:
     branches:
-      - shiku
+      - prod
 
 jobs:
   deploy:
@@ -19,8 +19,8 @@ jobs:
           script: |
             cd /var/www/meetbrief
             git fetch origin
-            git checkout shiku
-            git pull origin shiku
+            git checkout prod
+            git pull origin prod
             npm install --production=false
             npm run build
             pm2 restart meetbrief || pm2 start npm --name meetbrief -- start -- -p 3002
