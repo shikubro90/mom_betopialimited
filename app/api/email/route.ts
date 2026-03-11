@@ -113,7 +113,6 @@ export async function POST(req: NextRequest) {
 
   const { to, cc, subject, summaryId, title, date, attendees, executiveSummary, decisions, actionItems, nextSteps, attachments } = parsed.data;
 
-  console.log("[EMAIL] attachments count:", attachments.length, attachments.map(a => a.filename));
   const toList = parseEmails(to);
   const ccList = cc ? parseEmails(cc) : [];
 
