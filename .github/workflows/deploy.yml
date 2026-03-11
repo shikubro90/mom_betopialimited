@@ -16,7 +16,9 @@ jobs:
           port: 22
           username: root
           password: ${{ secrets.SSH_PASSWORD }}
+          script_stop: true
           script: |
+            set -e
             cd /var/www/meetbrief
             git fetch origin
             git checkout prod
