@@ -71,6 +71,22 @@ async function readTextFiles(files: File[]): Promise<string> {
   return texts.join("");
 }
 
+async function readFilesAsBase64(files: File[]): Promise<{ filename: string; content: string; contentType: string }[]> {
+  return Promise.all(
+    files.map(
+      (file) =>
+        new Promise<{ filename: string; content: string; contentType: string }>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64 = (reader.result as string).split(",")[1] ?? "";
+            resolve({ filename: file.name, content: base64, contentType: file.type || "application/octet-stream" });
+          };
+          reader.readAsDataURL(file);
+        })
+    )
+  );
+}
+
 function getFingerprint(): string {
   try {
     const raw = [
@@ -145,6 +161,7 @@ export default function HomePage() {
   const [meetingMeta,     setMeetingMeta]     = useState<MeetingMeta>({ title: "", date: "", attendees: "" });
   const [attendeeEmails,  setAttendeeEmails]  = useState("");
   const [attachmentNames, setAttachmentNames] = useState<string[]>([]);
+  const [attachments,     setAttachments]     = useState<{ filename: string; content: string; contentType: string }[]>([]);
   const [isLoading,       setIsLoading]       = useState(false);
   const [error,           setError]           = useState<string | null>(null);
   const [warning,         setWarning]         = useState<string | null>(null);
@@ -160,6 +177,7 @@ export default function HomePage() {
     setMeetingMeta({ title: data.title, date: data.date, attendees: data.attendees });
     setAttendeeEmails(data.attendeeEmails ?? "");
     setAttachmentNames(data.attachmentNames ?? []);
+    setAttachments(files.length > 0 ? await readFilesAsBase64(files) : []);
     setSummaryKey((k) => k + 1);
 
     if (data.mode === "manual") {
@@ -285,6 +303,7 @@ export default function HomePage() {
             summary={currentSummary}
             meta={meetingMeta}
             attachmentNames={attachmentNames}
+            attachments={attachments}
           />
         )}
       </section>

@@ -20,9 +20,13 @@ function makeTransport() {
 }
 
 export async function sendEmail({
-  to, cc, subject, html,
+  to, cc, subject, html, attachments = [],
 }: {
-  to: string; cc?: string; subject: string; html: string;
+  to: string;
+  cc?: string;
+  subject: string;
+  html: string;
+  attachments?: { filename: string; content: string; contentType: string }[];
 }): Promise<MailResult> {
   const toList = to.split(",").map((e) => e.trim()).filter(Boolean);
   const ccList = cc ? cc.split(",").map((e) => e.trim()).filter(Boolean) : [];
@@ -32,6 +36,11 @@ export async function sendEmail({
     to:      toList.join(", "),
     cc:      ccList.length > 0 ? ccList.join(", ") : undefined,
     subject, html,
+    attachments: attachments.map(({ filename, content, contentType }) => ({
+      filename,
+      content:  Buffer.from(content, "base64"),
+      contentType,
+    })),
   });
 
   console.log(`[MAILER] ✓ AWS SES → ${toList.join(", ")}`);

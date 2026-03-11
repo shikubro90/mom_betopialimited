@@ -21,9 +21,10 @@ interface Props {
   summary:          Summary;
   meta:             MeetingMeta;
   attachmentNames?: string[];
+  attachments?:     { filename: string; content: string; contentType: string }[];
 }
 
-export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, meta, attachmentNames }: Props) {
+export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, meta, attachmentNames, attachments }: Props) {
   const [subject,    setSubject]    = useState(defaultSubject);
   const [cc,         setCc]         = useState("");
   const [isSending,  setIsSending]  = useState(false);
@@ -61,6 +62,7 @@ export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, me
           decisions:        summary.decisions,
           actionItems:      summary.actionItems,
           nextSteps:        summary.nextSteps,
+          attachments:      attachments ?? [],
         }),
       });
       const json = await res.json();
