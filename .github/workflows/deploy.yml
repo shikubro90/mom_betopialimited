@@ -22,5 +22,7 @@ jobs:
             git checkout prod
             git pull origin prod
             npm install --production=false
+            npx prisma generate
+            npx prisma db push
             npm run build
             pm2 restart meetbrief || pm2 start npm --name meetbrief -- start -- -p 3002
