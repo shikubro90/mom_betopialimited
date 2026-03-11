@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  const { to, cc, subject, summaryId, title, date, attendees, executiveSummary, decisions, actionItems, nextSteps } = parsed.data;
+  const { to, cc, subject, summaryId, title, date, attendees, executiveSummary, decisions, actionItems, nextSteps, attachments } = parsed.data;
 
   const toList = parseEmails(to);
   const ccList = cc ? parseEmails(cc) : [];
@@ -126,6 +126,7 @@ export async function POST(req: NextRequest) {
       to:      toList.join(", "),
       subject: String(subject),
       html,
+      attachments: attachments ?? [],
       ...(ccList.length > 0 ? { cc: ccList.join(", ") } : {}),
     });
     provider = result.provider;
