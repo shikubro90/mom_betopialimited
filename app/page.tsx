@@ -72,19 +72,25 @@ async function readTextFiles(files: File[]): Promise<string> {
 }
 
 async function readFilesAsBase64(files: File[]): Promise<{ filename: string; content: string; contentType: string }[]> {
-  return Promise.all(
+  const results = await Promise.allSettled(
     files.map(
       (file) =>
-        new Promise<{ filename: string; content: string; contentType: string }>((resolve) => {
+        new Promise<{ filename: string; content: string; contentType: string }>((resolve, reject) => {
           const reader = new FileReader();
-          reader.onload = () => {
-            const base64 = (reader.result as string).split(",")[1] ?? "";
-            resolve({ filename: file.name, content: base64, contentType: file.type || "application/octet-stream" });
+          reader.onload  = () => {
+            const result = reader.result as string;
+            const base64 = result.includes(",") ? result.split(",")[1] : result;
+            resolve({ filename: file.name, content: base64 ?? "", contentType: file.type || "application/octet-stream" });
           };
+          reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+          reader.onabort = () => reject(new Error(`Aborted reading ${file.name}`));
           reader.readAsDataURL(file);
         })
     )
   );
+  return results
+    .filter((r): r is PromiseFulfilledResult<{ filename: string; content: string; contentType: string }> => r.status === "fulfilled")
+    .map((r) => r.value);
 }
 
 function getFingerprint(): string {

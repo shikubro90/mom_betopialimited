@@ -248,10 +248,12 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
           >
             <Paperclip className="w-4 h-4 text-gray-400 mx-auto mb-1" />
             <p className="text-xs text-gray-400">Click or drag files here</p>
+            <p className="text-[10px] text-gray-300 mt-0.5">PDF, Word, Excel, PPT, Images, PSD & more</p>
             <input
               ref={fileRef}
               type="file"
               multiple
+              accept="*/*"
               className="hidden"
               onChange={(e) => addFiles(e.target.files)}
             />
