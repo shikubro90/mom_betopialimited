@@ -14,7 +14,7 @@ function makeTransport() {
     auth:   { user: process.env.SES_USER, pass: process.env.SES_PASS },
     connectionTimeout: 15_000,
     greetingTimeout:   10_000,
-    socketTimeout:     30_000,
+    socketTimeout:     120_000,
     tls: { rejectUnauthorized: false },
   });
 }
