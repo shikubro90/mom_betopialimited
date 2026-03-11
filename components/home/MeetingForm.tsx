@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef }        from "react";
-import { Sparkles, Loader2, Calendar, FileText, ChevronDown, Plus, Trash2, UserPlus, Bot, PenLine, Paperclip, X } from "lucide-react";
+import { Sparkles, Loader2, Calendar, FileText, ChevronDown, Plus, Trash2, UserPlus, Bot, PenLine, Paperclip, X, AlertTriangle } from "lucide-react";
 import { cn }                    from "@/lib/utils";
 import { fieldCls, FieldError }  from "@/components/ui/form";
 import { meetingFormSchema }     from "@/lib/validations";
@@ -18,6 +18,18 @@ const TONES = [
 type AttendeeRow = { name: string; email: string };
 type FormErrors  = Partial<Record<keyof MeetingFormData, string>>;
 
+const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB
+
+const SUPPORTED_EXTS = new Set([
+  "jpg","jpeg","png","gif","svg","webp","psd",
+  "pdf","doc","docx","xls","xlsx","csv","ppt","pptx",
+  "txt","md","json","zip",
+]);
+
+function getExt(name: string) {
+  return name.split(".").pop()?.toLowerCase() ?? "";
+}
+
 interface Props {
   onSubmit:  (data: MeetingFormData, files: File[]) => void;
   isLoading: boolean;
@@ -29,6 +41,8 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
   const [errors, setErrors]     = useState<FormErrors>({});
   const [mode, setMode]         = useState<"ai" | "manual">("ai");
   const [files, setFiles]       = useState<File[]>([]);
+  const [fileAlerts, setFileAlerts] = useState<string[]>([]);
+  const [isReadingFiles, setIsReadingFiles] = useState(false);
   const fileRef                 = useRef<HTMLInputElement>(null);
 
   const set =
@@ -48,10 +62,33 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
 
   const addFiles = (newFiles: FileList | null) => {
     if (!newFiles) return;
-    setFiles((prev) => {
-      const existing = new Set(prev.map((f) => f.name));
-      return [...prev, ...Array.from(newFiles).filter((f) => !existing.has(f.name))];
+    const alerts: string[] = [];
+    const valid: File[] = [];
+
+    Array.from(newFiles).forEach((f) => {
+      if (f.size > MAX_FILE_SIZE) {
+        alerts.push(`"${f.name}" exceeds the 1 GB limit.`);
+        return;
+      }
+      const ext = getExt(f.name);
+      if (ext && !SUPPORTED_EXTS.has(ext)) {
+        alerts.push(`"${f.name}" format (.${ext}) is not supported.`);
+        return;
+      }
+      valid.push(f);
     });
+
+    if (alerts.length > 0) setFileAlerts(alerts);
+
+    if (valid.length > 0) {
+      setIsReadingFiles(true);
+      setFiles((prev) => {
+        const existing = new Set(prev.map((f) => f.name));
+        return [...prev, ...valid.filter((f) => !existing.has(f.name))];
+      });
+      // Brief delay to show loader while browser processes files
+      setTimeout(() => setIsReadingFiles(false), 600);
+    }
   };
 
   const removeFile = (name: string) => setFiles((prev) => prev.filter((f) => f.name !== name));
@@ -246,18 +283,32 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
             onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
             className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:border-brand-300 hover:bg-brand-50/30 transition-colors"
           >
-            <Paperclip className="w-4 h-4 text-gray-400 mx-auto mb-1" />
-            <p className="text-xs text-gray-400">Click or drag files here</p>
-            <p className="text-[10px] text-gray-300 mt-0.5">PDF, Word, Excel, PPT, Images, PSD & more</p>
+            {isReadingFiles
+              ? <Loader2 className="w-4 h-4 text-brand-400 mx-auto mb-1 animate-spin" />
+              : <Paperclip className="w-4 h-4 text-gray-400 mx-auto mb-1" />
+            }
+            <p className="text-xs text-gray-400">{isReadingFiles ? "Loading files…" : "Click or drag files here"}</p>
+            <p className="text-[10px] text-gray-300 mt-0.5">PDF, Word, Excel, PPT, CSV, Images, PSD · Max 1 GB</p>
             <input
               ref={fileRef}
               type="file"
               multiple
-              accept="*/*"
+              accept=".jpg,.jpeg,.png,.gif,.svg,.webp,.psd,.pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.md,.json,.zip"
               className="hidden"
-              onChange={(e) => addFiles(e.target.files)}
+              onChange={(e) => { setFileAlerts([]); addFiles(e.target.files); }}
             />
           </div>
+          {fileAlerts.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 space-y-1">
+              {fileAlerts.map((msg, i) => (
+                <p key={i} className="flex items-start gap-1.5 text-[11px] text-red-600">
+                  <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" /> {msg}
+                </p>
+              ))}
+              <button type="button" onClick={() => setFileAlerts([])} className="text-[10px] text-red-400 underline">Dismiss</button>
+            </div>
+          )}
+
           {files.length > 0 && (
             <ul className="space-y-1">
               {files.map((f) => (

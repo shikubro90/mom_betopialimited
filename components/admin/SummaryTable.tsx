@@ -6,13 +6,17 @@ import { Search, ChevronLeft, ChevronRight, Mail, MailX, ExternalLink } from "lu
 import { cn } from "@/lib/utils";
 
 export interface SummaryRow {
-  id:        string;
-  title:     string;
-  date:      string | null;
-  shortGist: string;
-  emailSent: boolean;
-  tone:      string;
-  createdAt: string;
+  id:               string;
+  title:            string;
+  date:             string | null;
+  shortGist:        string;
+  executiveSummary: string;
+  decisions:        string[];
+  actionItems:      string[];
+  nextSteps:        string[];
+  emailSent:        boolean;
+  tone:             string;
+  createdAt:        string;
 }
 
 const PAGE_SIZE = 15;
@@ -119,63 +123,70 @@ export function SummaryTable({ rows, total, sent, week }: Props) {
           </div>
         </div>
 
-        {/* Desktop table */}
-        <div className="hidden sm:block overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-800 text-left">
-                {["Title", "Date", "Tone", "Gist", "Email", "Created"].map((h) => (
-                  <th key={h} className="px-5 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-widest whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-                <th className="px-5 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {slice.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-5 py-10 text-center text-gray-600 text-sm">
-                    No results found.
-                  </td>
-                </tr>
-              ) : (
-                slice.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="border-b border-gray-800/60 hover:bg-gray-800/40 transition-colors group"
-                  >
-                    <td className="px-5 py-3.5 font-medium text-gray-200 max-w-[180px] truncate">
-                      {row.title}
-                    </td>
-                    <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap">
-                      {row.date ?? "—"}
-                    </td>
-                    <td className="px-5 py-3.5">
+        {/* AI Summary Cards */}
+        <div className="divide-y divide-gray-800">
+          {slice.length === 0 ? (
+            <p className="px-5 py-10 text-center text-gray-600 text-sm">No results found.</p>
+          ) : (
+            slice.map((row) => (
+              <div key={row.id} className="px-5 py-5 hover:bg-gray-800/30 transition-colors group">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-100 text-sm truncate">{row.title}</p>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
                       <ToneBadge tone={row.tone} />
-                    </td>
-                    <td className="px-5 py-3.5 text-gray-400 max-w-[260px]">
-                      <p className="truncate italic text-xs">{row.shortGist}</p>
-                    </td>
-                    <td className="px-5 py-3.5">
                       <StatusBadge sent={row.emailSent} />
-                    </td>
-                    <td className="px-5 py-3.5 text-gray-500 text-xs whitespace-nowrap">
-                      {fmt(row.createdAt)}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <Link
-                        href={`/admin/${row.id}`}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-brand-400 hover:text-brand-300 text-xs font-semibold"
-                      >
-                        View <ExternalLink className="w-3 h-3" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                      {row.date && <span className="text-[11px] text-gray-500">{row.date}</span>}
+                      <span className="text-[11px] text-gray-600">{fmt(row.createdAt)}</span>
+                    </div>
+                  </div>
+                  <Link
+                    href={`/superadmin/${row.id}`}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-brand-400 hover:text-brand-300 text-xs font-semibold shrink-0"
+                  >
+                    View <ExternalLink className="w-3 h-3" />
+                  </Link>
+                </div>
+
+                {/* Executive Summary */}
+                {row.executiveSummary && (
+                  <div className="bg-indigo-950/40 border border-indigo-800/30 rounded-lg px-3 py-2 mb-3">
+                    <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">Executive Summary</p>
+                    <p className="text-xs text-gray-300 line-clamp-2">{row.executiveSummary}</p>
+                  </div>
+                )}
+
+                {/* Decisions / Actions / Next Steps */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {row.decisions?.length > 0 && (
+                    <div className="rounded-lg bg-purple-950/30 border border-purple-800/20 px-3 py-2">
+                      <p className="text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1">Decisions</p>
+                      <ul className="space-y-0.5">{row.decisions.slice(0, 3).map((d, i) => (
+                        <li key={i} className="text-[11px] text-gray-400 truncate">· {d}</li>
+                      ))}</ul>
+                    </div>
+                  )}
+                  {row.actionItems?.length > 0 && (
+                    <div className="rounded-lg bg-amber-950/30 border border-amber-800/20 px-3 py-2">
+                      <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider mb-1">Action Items</p>
+                      <ul className="space-y-0.5">{row.actionItems.slice(0, 3).map((a, i) => (
+                        <li key={i} className="text-[11px] text-gray-400 truncate">· {a}</li>
+                      ))}</ul>
+                    </div>
+                  )}
+                  {row.nextSteps?.length > 0 && (
+                    <div className="rounded-lg bg-emerald-950/30 border border-emerald-800/20 px-3 py-2">
+                      <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-1">Next Steps</p>
+                      <ul className="space-y-0.5">{row.nextSteps.slice(0, 3).map((n, i) => (
+                        <li key={i} className="text-[11px] text-gray-400 truncate">· {n}</li>
+                      ))}</ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
         </div>
 
         {/* Mobile cards */}
@@ -186,7 +197,7 @@ export function SummaryTable({ rows, total, sent, week }: Props) {
             slice.map((row) => (
               <Link
                 key={row.id}
-                href={`/admin/${row.id}`}
+                href={`/superadmin/${row.id}`}
                 className="flex flex-col gap-2 px-5 py-4 hover:bg-gray-800/40 transition-colors"
               >
                 <div className="flex items-start justify-between gap-2">
