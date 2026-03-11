@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: meetbrief
+    restart: always
+    ports:
+      - "3002:3002"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      SESSION_SECRET: ${SESSION_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH}
+      SES_HOST: ${SES_HOST}
+      SES_PORT: ${SES_PORT}
+      SES_USER: ${SES_USER}
+      SES_PASS: ${SES_PASS}
+      SES_FROM_EMAIL: ${SES_FROM_EMAIL}
+      SES_FROM_NAME: ${SES_FROM_NAME}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - meetbrief-net
+
+  db:
+    image: postgres:16-alpine
+    container_name: meetbrief-db
+    restart: always
+    environment:
+      POSTGRES_DB: meetbrief
+      POSTGRES_USER: meetbrief
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meetbrief"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - meetbrief-net
+
+volumes:
+  postgres_data:
+
+networks:
+  meetbrief-net:
+    driver: bridge

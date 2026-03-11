@@ -46,6 +46,11 @@ export const emailBodySchema = z.object({
   decisions:        z.array(z.string()).default([]),
   actionItems:      z.array(z.string()).default([]),
   nextSteps:        z.array(z.string()).default([]),
+  attachments:      z.array(z.object({
+    filename:    z.string(),
+    content:     z.string(),
+    contentType: z.string(),
+  })).optional().default([]),
 });
 
 /* ─── Client-side form schemas ───────────────────────────── */
