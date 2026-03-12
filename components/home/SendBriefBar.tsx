@@ -65,20 +65,30 @@ export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, me
           attachments:      attachments ?? [],
         }),
       });
-      const json = await res.json();
+      // Safely parse JSON — Nginx may return HTML on 413/5xx
+      let json: Record<string, unknown> = {};
+      try { json = await res.json(); } catch {
+        const label = res.status === 413
+          ? "File too large — reduce attachment size and try again"
+          : `Server error (HTTP ${res.status}) — please try again`;
+        setDelivery({ ok: false, accepted: 0, rejected: recipientCount, error: label, time: now() });
+        return;
+      }
+
       if (!res.ok) {
-        setDelivery({ ok: false, accepted: 0, rejected: recipientCount, error: json.error ?? "Failed to send", time: now() });
+        setDelivery({ ok: false, accepted: 0, rejected: recipientCount, error: (json.error as string) ?? "Failed to send", time: now() });
       } else {
         setSent(true);
         setDelivery({
           ok:       true,
-          accepted: json.accepted?.length ?? recipientCount,
-          rejected: json.rejected?.length ?? 0,
+          accepted: (json.accepted as string[])?.length ?? recipientCount,
+          rejected: (json.rejected as string[])?.length ?? 0,
           time:     now(),
         });
       }
-    } catch {
-      setDelivery({ ok: false, accepted: 0, rejected: recipientCount, error: "Network error — please try again", time: now() });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Network error";
+      setDelivery({ ok: false, accepted: 0, rejected: recipientCount, error: `${msg} — please try again`, time: now() });
     } finally {
       setIsSending(false);
     }
