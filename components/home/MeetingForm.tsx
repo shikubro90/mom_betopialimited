@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles, Loader2, Calendar, FileText, ChevronDown, Plus, Trash2, UserPlus, Bot, PenLine, Paperclip, X, AlertTriangle, Eraser } from "lucide-react";
 import { cn }                    from "@/lib/utils";
 import { fieldCls, FieldError }  from "@/components/ui/form";
@@ -19,6 +19,7 @@ const TONES = [
 
 type AttendeeRow = { name: string; email: string };
 type FormErrors  = Partial<Record<keyof MeetingFormData, string>>;
+type Contact     = { id: string; name: string; email: string };
 
 const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB
 
@@ -45,16 +46,83 @@ function loadDraft() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null"); } catch { return null; }
 }
 
+// Attendee suggestion dropdown
+function SuggestionDropdown({
+  suggestions,
+  onSelect,
+  inputRef,
+}: {
+  suggestions: Contact[];
+  onSelect: (c: Contact) => void;
+  inputRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  if (suggestions.length === 0) return null;
+  return (
+    <div
+      className="absolute left-0 top-full mt-1 z-50 w-full min-w-[220px] bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+    >
+      {suggestions.map((c) => (
+        <button
+          key={c.id}
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); onSelect(c); }}
+          className="w-full text-left px-3 py-2 hover:bg-brand-50 transition-colors"
+        >
+          <div className="text-sm font-medium text-gray-800 truncate">{c.name}</div>
+          <div className="text-xs text-gray-400 truncate">{c.email}</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function MeetingForm({ onSubmit, isLoading }: Props) {
   const draft = loadDraft();
-  const [form, setForm]         = useState<typeof DEFAULT_FORM>(draft?.form ?? DEFAULT_FORM);
-  const [attendees, setAttendees] = useState<AttendeeRow[]>(draft?.attendees ?? DEFAULT_ATTENDEES);
-  const [errors, setErrors]     = useState<FormErrors>({});
-  const [mode, setMode]         = useState<"ai" | "manual">(draft?.mode ?? "ai");
-  const [files, setFiles]       = useState<File[]>([]);
+  const [form, setForm]             = useState<typeof DEFAULT_FORM>(draft?.form ?? DEFAULT_FORM);
+  const [attendees, setAttendees]   = useState<AttendeeRow[]>(draft?.attendees ?? DEFAULT_ATTENDEES);
+  const [errors, setErrors]         = useState<FormErrors>({});
+  const [mode, setMode]             = useState<"ai" | "manual">(draft?.mode ?? "ai");
+  const [files, setFiles]           = useState<File[]>([]);
   const [fileAlerts, setFileAlerts] = useState<string[]>([]);
   const [isReadingFiles, setIsReadingFiles] = useState(false);
-  const fileRef                 = useRef<HTMLInputElement>(null);
+  const fileRef                     = useRef<HTMLInputElement>(null);
+
+  // Contacts for autocomplete
+  const [contacts, setContacts]         = useState<Contact[]>([]);
+  // Track which input is focused: { rowIdx, field }
+  const [focusedInput, setFocusedInput] = useState<{ row: number; field: "name" | "email" } | null>(null);
+  const dropdownContainerRefs           = useRef<Record<string, React.RefObject<HTMLDivElement | null>>>({});
+
+  // Fetch contacts on mount
+  useEffect(() => {
+    fetch("/api/contacts")
+      .then((res) => {
+        if (!res.ok) return [];
+        return res.json() as Promise<Contact[]>;
+      })
+      .then((data) => setContacts(Array.isArray(data) ? data : []))
+      .catch(() => setContacts([]));
+  }, []);
+
+  // Close dropdown on Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFocusedInput(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const getSuggestions = useCallback(
+    (value: string): Contact[] => {
+      if (!value.trim() || contacts.length === 0) return [];
+      const q = value.toLowerCase();
+      return contacts
+        .filter((c) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
+        .slice(0, 5);
+    },
+    [contacts]
+  );
 
   // Persist draft to localStorage on every change
   useEffect(() => {
@@ -81,6 +149,11 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
   const setAttendee = (i: number, field: keyof AttendeeRow, value: string) => {
     setAttendees((prev) => prev.map((a, idx) => idx === i ? { ...a, [field]: value } : a));
     setErrors((prev) => ({ ...prev, attendees: undefined, attendeeEmails: undefined }));
+  };
+
+  const selectSuggestion = (i: number, contact: Contact) => {
+    setAttendees((prev) => prev.map((a, idx) => idx === i ? { name: contact.name, email: contact.email } : a));
+    setFocusedInput(null);
   };
 
   const addRow    = () => setAttendees((prev) => [...prev, { name: "", email: "" }]);
@@ -239,33 +312,64 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
           </label>
 
           <div className="space-y-2">
-            {attendees.map((row, i) => (
-              <div key={i} className="flex gap-2 items-start">
-                <input
-                  type="text"
-                  value={row.name}
-                  onChange={(e) => setAttendee(i, "name", e.target.value)}
-                  placeholder="Name"
-                  className={cn(fieldCls("focus:ring-brand-400"), "flex-1")}
-                />
-                <input
-                  type="email"
-                  value={row.email}
-                  onChange={(e) => setAttendee(i, "email", e.target.value)}
-                  placeholder="email@example.com"
-                  className={cn(fieldCls("focus:ring-brand-400"), "flex-1")}
-                />
-                {attendees.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeRow(i)}
-                    className="mt-0.5 p-2.5 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            ))}
+            {attendees.map((row, i) => {
+              const nameSuggestions  = focusedInput?.row === i && focusedInput.field === "name"
+                ? getSuggestions(row.name)
+                : [];
+              const emailSuggestions = focusedInput?.row === i && focusedInput.field === "email"
+                ? getSuggestions(row.email)
+                : [];
+
+              return (
+                <div key={i} className="flex gap-2 items-start">
+                  {/* Name field */}
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      value={row.name}
+                      onChange={(e) => setAttendee(i, "name", e.target.value)}
+                      onFocus={() => setFocusedInput({ row: i, field: "name" })}
+                      onBlur={() => setTimeout(() => setFocusedInput(null), 150)}
+                      placeholder="Name"
+                      className={cn(fieldCls("focus:ring-brand-400"), "w-full")}
+                    />
+                    <SuggestionDropdown
+                      suggestions={nameSuggestions}
+                      onSelect={(c) => selectSuggestion(i, c)}
+                      inputRef={{ current: null }}
+                    />
+                  </div>
+
+                  {/* Email field */}
+                  <div className="flex-1 relative">
+                    <input
+                      type="email"
+                      value={row.email}
+                      onChange={(e) => setAttendee(i, "email", e.target.value)}
+                      onFocus={() => setFocusedInput({ row: i, field: "email" })}
+                      onBlur={() => setTimeout(() => setFocusedInput(null), 150)}
+                      placeholder="email@example.com"
+                      className={cn(fieldCls("focus:ring-brand-400"), "w-full")}
+                    />
+                    <SuggestionDropdown
+                      suggestions={emailSuggestions}
+                      onSelect={(c) => selectSuggestion(i, c)}
+                      inputRef={{ current: null }}
+                    />
+                  </div>
+
+                  {attendees.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeRow(i)}
+                      className="mt-0.5 p-2.5 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <div className="flex justify-end">
