@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Sparkles, Loader2, Calendar, FileText, ChevronDown, Plus, Trash2, UserPlus, Bot, PenLine, Paperclip, X, AlertTriangle, Eraser } from "lucide-react";
 import { cn }                    from "@/lib/utils";
 import { fieldCls, FieldError }  from "@/components/ui/form";
 import { meetingFormSchema }     from "@/lib/validations";
 import type { MeetingFormData }  from "@/types/meeting";
+import { useContactSearch, type Contact } from "@/lib/useContacts";
 
 const STORAGE_KEY = "mombetopia_form_draft";
 
@@ -19,7 +20,6 @@ const TONES = [
 
 type AttendeeRow = { name: string; email: string };
 type FormErrors  = Partial<Record<keyof MeetingFormData, string>>;
-type Contact     = { id: string; name: string; email: string };
 
 const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB
 
@@ -77,31 +77,32 @@ function SuggestionDropdown({
 }
 
 export function MeetingForm({ onSubmit, isLoading }: Props) {
-  const draft = loadDraft();
-  const [form, setForm]             = useState<typeof DEFAULT_FORM>(draft?.form ?? DEFAULT_FORM);
-  const [attendees, setAttendees]   = useState<AttendeeRow[]>(draft?.attendees ?? DEFAULT_ATTENDEES);
+  const [form, setForm]             = useState<typeof DEFAULT_FORM>(DEFAULT_FORM);
+  const [attendees, setAttendees]   = useState<AttendeeRow[]>(DEFAULT_ATTENDEES);
   const [errors, setErrors]         = useState<FormErrors>({});
-  const [mode, setMode]             = useState<"ai" | "manual">(draft?.mode ?? "ai");
+  const [mode, setMode]             = useState<"ai" | "manual">("ai");
   const [files, setFiles]           = useState<File[]>([]);
   const [fileAlerts, setFileAlerts] = useState<string[]>([]);
   const [isReadingFiles, setIsReadingFiles] = useState(false);
   const fileRef                     = useRef<HTMLInputElement>(null);
 
-  // Contacts for autocomplete
-  const [contacts, setContacts]         = useState<Contact[]>([]);
-  // Track which input is focused: { rowIdx, field }
+  // Per-row server-side contact search — one hook instance per rendered row
+  const row0 = useContactSearch();
+  const row1 = useContactSearch();
+  const row2 = useContactSearch();
+  const row3 = useContactSearch();
+  const row4 = useContactSearch();
+  const rowSearchHooks = [row0, row1, row2, row3, row4];
+  const getRowSearch = (i: number) => rowSearchHooks[i] ?? row4;
   const [focusedInput, setFocusedInput] = useState<{ row: number; field: "name" | "email" } | null>(null);
-  const dropdownContainerRefs           = useRef<Record<string, React.RefObject<HTMLDivElement | null>>>({});
 
-  // Fetch contacts on mount
+  // Load draft from localStorage after hydration to avoid SSR mismatch
   useEffect(() => {
-    fetch("/api/contacts")
-      .then((res) => {
-        if (!res.ok) return [];
-        return res.json() as Promise<Contact[]>;
-      })
-      .then((data) => setContacts(Array.isArray(data) ? data : []))
-      .catch(() => setContacts([]));
+    const draft = loadDraft();
+    if (!draft) return;
+    if (draft.form)      setForm(draft.form);
+    if (draft.attendees) setAttendees(draft.attendees);
+    if (draft.mode)      setMode(draft.mode);
   }, []);
 
   // Close dropdown on Escape
@@ -112,17 +113,6 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
-  const getSuggestions = useCallback(
-    (value: string): Contact[] => {
-      if (!value.trim() || contacts.length === 0) return [];
-      const q = value.toLowerCase();
-      return contacts
-        .filter((c) => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
-        .slice(0, 5);
-    },
-    [contacts]
-  );
 
   // Persist draft to localStorage on every change
   useEffect(() => {
@@ -229,8 +219,8 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-brand-50 via-purple-50 to-pink-50 flex items-center justify-between">
+    <div className="rounded-2xl overflow-hidden shadow-xl" style={{ background: "rgba(255,255,255,0.55)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.45)" }}>
+      <div className="px-6 py-4 border-b flex items-center justify-between" style={{ background: "rgba(255,255,255,0.35)", borderColor: "rgba(255,255,255,0.35)" }}>
         <div className="flex items-center gap-2">
           <span className="w-7 h-7 rounded-lg bg-hero-gradient flex items-center justify-center shrink-0">
             <FileText className="w-3.5 h-3.5 text-white" />
@@ -313,12 +303,9 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
 
           <div className="space-y-2">
             {attendees.map((row, i) => {
-              const nameSuggestions  = focusedInput?.row === i && focusedInput.field === "name"
-                ? getSuggestions(row.name)
-                : [];
-              const emailSuggestions = focusedInput?.row === i && focusedInput.field === "email"
-                ? getSuggestions(row.email)
-                : [];
+              const { suggestions, search: searchContacts, clear: clearSuggestions } = getRowSearch(i);
+              const nameActive  = focusedInput?.row === i && focusedInput.field === "name";
+              const emailActive = focusedInput?.row === i && focusedInput.field === "email";
 
               return (
                 <div key={i} className="flex gap-2 items-start">
@@ -327,17 +314,23 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
                     <input
                       type="text"
                       value={row.name}
-                      onChange={(e) => setAttendee(i, "name", e.target.value)}
-                      onFocus={() => setFocusedInput({ row: i, field: "name" })}
-                      onBlur={() => setTimeout(() => setFocusedInput(null), 150)}
+                      onChange={(e) => {
+                        setAttendee(i, "name", e.target.value);
+                        setFocusedInput({ row: i, field: "name" });
+                        searchContacts(e.target.value);
+                      }}
+                      onFocus={() => { setFocusedInput({ row: i, field: "name" }); searchContacts(row.name || " "); }}
+                      onBlur={() => setTimeout(() => { setFocusedInput(null); clearSuggestions(); }, 300)}
                       placeholder="Name"
                       className={cn(fieldCls("focus:ring-brand-400"), "w-full")}
                     />
-                    <SuggestionDropdown
-                      suggestions={nameSuggestions}
-                      onSelect={(c) => selectSuggestion(i, c)}
-                      inputRef={{ current: null }}
-                    />
+                    {nameActive && suggestions.length > 0 && (
+                      <SuggestionDropdown
+                        suggestions={suggestions}
+                        onSelect={(c) => { selectSuggestion(i, c); clearSuggestions(); setFocusedInput(null); }}
+                        inputRef={{ current: null }}
+                      />
+                    )}
                   </div>
 
                   {/* Email field */}
@@ -345,17 +338,23 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
                     <input
                       type="email"
                       value={row.email}
-                      onChange={(e) => setAttendee(i, "email", e.target.value)}
-                      onFocus={() => setFocusedInput({ row: i, field: "email" })}
-                      onBlur={() => setTimeout(() => setFocusedInput(null), 150)}
+                      onChange={(e) => {
+                        setAttendee(i, "email", e.target.value);
+                        setFocusedInput({ row: i, field: "email" });
+                        searchContacts(e.target.value);
+                      }}
+                      onFocus={() => { setFocusedInput({ row: i, field: "email" }); searchContacts(row.email || " "); }}
+                      onBlur={() => setTimeout(() => { setFocusedInput(null); clearSuggestions(); }, 300)}
                       placeholder="email@example.com"
                       className={cn(fieldCls("focus:ring-brand-400"), "w-full")}
                     />
-                    <SuggestionDropdown
-                      suggestions={emailSuggestions}
-                      onSelect={(c) => selectSuggestion(i, c)}
-                      inputRef={{ current: null }}
-                    />
+                    {emailActive && suggestions.length > 0 && (
+                      <SuggestionDropdown
+                        suggestions={suggestions}
+                        onSelect={(c) => { selectSuggestion(i, c); clearSuggestions(); setFocusedInput(null); }}
+                        inputRef={{ current: null }}
+                      />
+                    )}
                   </div>
 
                   {attendees.length > 1 && (

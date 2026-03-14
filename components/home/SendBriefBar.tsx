@@ -5,6 +5,7 @@ import { Send, Loader2, Check, Mail, Users, AtSign, Paperclip, X, CheckCircle2, 
 import { cn }                   from "@/lib/utils";
 import { fieldCls, FieldError } from "@/components/ui/form";
 import type { Summary, MeetingMeta } from "@/types/meeting";
+import { useContactSearch, type Contact } from "@/lib/useContacts";
 
 type DeliveryStatus = {
   ok:       boolean;
@@ -25,13 +26,23 @@ interface Props {
 }
 
 export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, meta, attachmentNames, attachments }: Props) {
+  const { suggestions: ccSuggestions, search: searchCc, clear: clearCc } = useContactSearch();
   const [subject,     setSubject]     = useState(defaultSubject);
   const [ccList,      setCcList]      = useState<string[]>([""]);
+  const [focusedCc,   setFocusedCc]   = useState<number | null>(null);
   const [isSending,   setIsSending]   = useState(false);
   const [sent,        setSent]        = useState(false);
   const [delivery,    setDelivery]    = useState<DeliveryStatus>(null);
   const [subjectErr,  setSubjectErr]  = useState("");
   const [showPreview, setShowPreview] = useState(false);
+
+  const selectCc = (i: number, c: Contact) => {
+    const next = [...ccList];
+    next[i] = c.email;
+    setCcList(next);
+    setFocusedCc(null);
+    clearCc();
+  };
 
   const cc = ccList.filter(Boolean).join(", ");
 
@@ -153,17 +164,38 @@ export function SendBriefBar({ defaultSubject, defaultTo, summaryId, summary, me
             </label>
             {ccList.map((val, i) => (
               <div key={i} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={val}
-                  onChange={(e) => {
-                    const next = [...ccList];
-                    next[i] = e.target.value;
-                    setCcList(next);
-                  }}
-                  placeholder="manager@company.com"
-                  className={cn(fieldCls("focus:ring-emerald-400"), "flex-1")}
-                />
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={val}
+                    onChange={(e) => {
+                      const next = [...ccList];
+                      next[i] = e.target.value;
+                      setCcList(next);
+                      setFocusedCc(i);
+                      searchCc(e.target.value);
+                    }}
+                    onFocus={() => { setFocusedCc(i); searchCc(val); }}
+                    onBlur={() => setTimeout(() => { setFocusedCc(null); clearCc(); }, 300)}
+                    placeholder="Type name or email…"
+                    className={cn(fieldCls("focus:ring-emerald-400"), "w-full")}
+                  />
+                  {focusedCc === i && ccSuggestions.length > 0 && (
+                    <div className="absolute left-0 top-full mt-1 z-50 w-full min-w-[240px] bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+                      {ccSuggestions.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); selectCc(i, c); }}
+                          className="w-full text-left px-3 py-2 hover:bg-emerald-50 transition-colors"
+                        >
+                          <div className="text-sm font-medium text-gray-800 truncate">{c.name}</div>
+                          <div className="text-xs text-gray-400 truncate">{c.email}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 {ccList.length > 1 && (
                   <button
                     type="button"

@@ -1,8 +1,9 @@
-import { PrismaClient } from "@prisma/client";
-const db = new PrismaClient();
+import { NextResponse }  from "next/server";
+import { getSession }    from "@/lib/session";
+import { db }            from "@/lib/db";
 
-const contacts = [
-  { name: "Betopia Cloud", email: "BetopiaCloud@betopialimited.com" },
+const CONTACTS = [
+  { name: "Betopia Cloud", email: "betopiacloud@betopialimited.com" },
   { name: "Md. Saiful Islam", email: "saiful.islam@betopialimited.com" },
   { name: "Shawon Ghosh", email: "shawon.ghosh@betopialimited.com" },
   { name: "Md. Jahidul Islam", email: "jahidul.islam@betopialimited.com" },
@@ -173,15 +174,22 @@ const contacts = [
   { name: "Md. Ariful Islam", email: "arif.islam@betopialimited.com" },
 ];
 
-async function main() {
-  for (const c of contacts) {
-    await db.employeeDirectory.upsert({
-      where:  { email: c.email.toLowerCase() },
-      update: { name: c.name },
-      create: { name: c.name, email: c.email.toLowerCase() },
-    });
+export async function POST() {
+  const session = await getSession();
+  if (!session || session.role !== "ADMIN") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  console.log(`Seeded ${contacts.length} contacts`);
-}
 
-main().then(() => db.$disconnect()).catch((e) => { console.error(e); db.$disconnect(); process.exit(1); });
+  let seeded = 0;
+  for (const c of CONTACTS) {
+    const email = c.email.toLowerCase();
+    await db.employeeDirectory.upsert({
+      where:  { email },
+      update: { name: c.name },
+      create: { name: c.name, email },
+    });
+    seeded++;
+  }
+
+  return NextResponse.json({ success: true, seeded });
+}

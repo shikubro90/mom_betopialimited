@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
-import { Trash2, Upload, Search, Users, X, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Trash2, Upload, Search, Users, X, AlertCircle, CheckCircle2, DatabaseZap } from "lucide-react";
 
 type Contact = {
   id:         string;
@@ -50,11 +50,12 @@ function parseCsv(text: string): Array<{ name: string; email: string }> {
 }
 
 export function ContactsManager({ initialContacts }: Props) {
-  const [contacts, setContacts] = useState<Contact[]>(initialContacts);
-  const [query, setQuery]       = useState("");
+  const [contacts, setContacts]   = useState<Contact[]>(initialContacts);
+  const [query, setQuery]         = useState("");
   const [uploading, setUploading] = useState(false);
-  const [dragOver, setDragOver]  = useState(false);
-  const [toast, setToast]        = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [seeding, setSeeding]     = useState(false);
+  const [dragOver, setDragOver]   = useState(false);
+  const [toast, setToast]         = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const showToast = (type: "success" | "error", msg: string) => {
@@ -149,6 +150,21 @@ export function ContactsManager({ initialContacts }: Props) {
     }
   };
 
+  const seedBuiltIn = async () => {
+    setSeeding(true);
+    try {
+      const res  = await fetch("/api/admin/seed-contacts", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) { showToast("error", data.error ?? "Seed failed"); return; }
+      showToast("success", `✓ ${data.seeded} contacts seeded successfully`);
+      await refreshContacts();
+    } catch {
+      showToast("error", "Seed failed — check connection");
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   const filtered = contacts.filter((c) => {
     if (!query) return true;
     const q = query.toLowerCase();
@@ -184,6 +200,14 @@ export function ContactsManager({ initialContacts }: Props) {
             {contacts.length} contacts
           </span>
         </div>
+        <button
+          onClick={seedBuiltIn}
+          disabled={seeding}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-700 hover:bg-brand-600 text-white transition-colors disabled:opacity-50"
+        >
+          <DatabaseZap className="w-3.5 h-3.5" />
+          {seeding ? "Seeding…" : "Seed 171 Contacts"}
+        </button>
       </div>
 
       {/* CSV Upload */}

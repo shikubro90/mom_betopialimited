@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSession }               from "@/lib/session";
 import { db }                       from "@/lib/db";
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
 
   const contacts = await db.employeeDirectory.findMany({
@@ -21,6 +15,7 @@ export async function GET(req: NextRequest) {
       : undefined,
     orderBy: { name: "asc" },
     select: { id: true, name: true, email: true },
+    take: 20,
   });
 
   return NextResponse.json(contacts);
