@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
       : undefined,
     orderBy: { name: "asc" },
     select: { id: true, name: true, email: true },
-    take: 20,
+    take: q ? 50 : 20,  // more results when searching, fewer for empty-field browse
   });
 
   return NextResponse.json(contacts);
