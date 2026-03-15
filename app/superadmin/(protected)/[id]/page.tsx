@@ -80,10 +80,11 @@ function SectionList({
 export default async function SummaryDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const record = await db.meetingSummary.findUnique({
-    where: { id: params.id },
+    where: { id },
   });
 
   if (!record) notFound();
