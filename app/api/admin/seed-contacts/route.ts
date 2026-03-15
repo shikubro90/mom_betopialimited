@@ -1,6 +1,5 @@
-import { NextResponse }  from "next/server";
-import { getSession }    from "@/lib/session";
-import { db }            from "@/lib/db";
+import { NextResponse } from "next/server";
+import { db }           from "@/lib/db";
 
 const CONTACTS = [
   { name: "Betopia Cloud", email: "betopiacloud@betopialimited.com" },
@@ -175,11 +174,6 @@ const CONTACTS = [
 ];
 
 export async function POST() {
-  const session = await getSession();
-  if (!session || session.role !== "ADMIN") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   // Seed allowed domains
   const domains = ["betopiagroup.com", "betopialimited.com", "betopiacloud.com"];
   for (const domain of domains) {
