@@ -180,6 +180,17 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Seed allowed domains
+  const domains = ["betopiagroup.com", "betopialimited.com", "betopiacloud.com"];
+  for (const domain of domains) {
+    await db.allowedDomain.upsert({
+      where:  { domain },
+      update: { active: true },
+      create: { domain, active: true },
+    });
+  }
+
+  // Seed employee contacts
   let seeded = 0;
   for (const c of CONTACTS) {
     const email = c.email.toLowerCase();
@@ -191,5 +202,5 @@ export async function POST() {
     seeded++;
   }
 
-  return NextResponse.json({ success: true, seeded });
+  return NextResponse.json({ success: true, seeded, domains: domains.length });
 }
