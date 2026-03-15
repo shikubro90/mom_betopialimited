@@ -1,10 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-images: {
+  images: {
     remotePatterns: [],
   },
+  serverExternalPackages: ["@prisma/client"],
+  turbopack: {
+    root: __dirname,
+  },
   experimental: {
-    serverComponentsExternalPackages: ["@prisma/client"],
+    serverActions: {
+      bodySizeLimit: "50mb",
+    },
   },
 };
 

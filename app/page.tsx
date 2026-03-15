@@ -3,6 +3,9 @@
 import { useState }          from "react";
 import Link                   from "next/link";
 import { Navbar }             from "@/components/home/Navbar";
+import { VibeBackground }     from "@/components/home/VibeBackground";
+import { WeatherEffect }      from "@/components/home/WeatherEffect";
+import { useVibe }            from "@/lib/useVibe";
 import { MeetingForm }        from "@/components/home/MeetingForm";
 import { SummaryCard }        from "@/components/home/SummaryCard";
 import { SendBriefBar }       from "@/components/home/SendBriefBar";
@@ -160,6 +163,7 @@ async function generateSummary(data: MeetingFormData, files: File[]): Promise<Su
 
 /* ── Page ─────────────────────────────────────────────────── */
 export default function HomePage() {
+  const theme = useVibe();
   const [summary,         setSummary]         = useState<Summary | null>(null);
   const [currentSummary,  setCurrentSummary]  = useState<Summary | null>(null);
   const [summaryId,       setSummaryId]       = useState<string | null>(null);
@@ -223,7 +227,9 @@ export default function HomePage() {
   const handleSummaryChange = (updated: Summary) => setCurrentSummary(updated);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/40">
+    <div className="min-h-screen">
+      <VibeBackground />
+      <WeatherEffect />
       <Navbar />
 
       {/* Rate-limit modal */}
@@ -231,35 +237,34 @@ export default function HomePage() {
 
       {/* ── Hero ──────────────────────────────────────────── */}
       <section className="relative overflow-hidden pt-14 pb-10 px-4">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(ellipse 80% 50% at 50% -10%, rgba(99,102,241,0.15) 0%, transparent 70%)",
-          }}
-        />
 
         <div className="relative z-10 max-w-2xl mx-auto text-center space-y-5">
-          <div className="inline-flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50 px-4 py-1.5 text-xs font-bold text-brand-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-brand-500 animate-pulse" />
+          <div
+            className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-bold"
+            style={{
+              background:   theme.badge.bg,
+              border:       `1px solid ${theme.badge.border}`,
+              color:        theme.badge.text,
+            }}
+          >
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: theme.badge.text }} />
             Powered by MoMBetopia AI
           </div>
 
-          <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight text-gray-900 leading-[1.1]">
+          <h1
+            className="text-5xl sm:text-6xl font-extrabold tracking-tight leading-[1.1]"
+            style={{ color: theme.text }}
+          >
             Turn meetings into{" "}
             <span
               className="bg-clip-text text-transparent"
-              style={{
-                backgroundImage:
-                  "linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%)",
-              }}
+              style={{ backgroundImage: theme.textAccent }}
             >
               clear briefs
             </span>
           </h1>
 
-          <p className="text-lg text-gray-500 max-w-lg mx-auto">
+          <p className="text-lg max-w-lg mx-auto" style={{ color: theme.textMuted }}>
             Paste your notes, pick a tone, and get an AI-generated summary —
             decisions, action items, and next steps, ready to share in seconds.
           </p>
@@ -271,8 +276,8 @@ export default function HomePage() {
               { label: "One-click email",  value: "✓" },
             ].map(({ label, value }) => (
               <div key={label} className="text-center">
-                <p className="text-xl font-extrabold text-brand-600">{value}</p>
-                <p className="text-[11px] text-gray-400 font-medium">{label}</p>
+                <p className="text-xl font-extrabold" style={{ color: theme.statValue }}>{value}</p>
+                <p className="text-[11px] font-medium"  style={{ color: theme.statLabel }}>{label}</p>
               </div>
             ))}
           </div>

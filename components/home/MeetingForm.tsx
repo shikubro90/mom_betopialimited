@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useRef }        from "react";
-import { Sparkles, Loader2, Calendar, FileText, ChevronDown, Plus, Trash2, UserPlus, Bot, PenLine, Paperclip, X, AlertTriangle } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Sparkles, Loader2, Calendar, FileText, ChevronDown, Plus, Trash2, UserPlus, Bot, PenLine, Paperclip, X, AlertTriangle, Eraser } from "lucide-react";
 import { cn }                    from "@/lib/utils";
 import { fieldCls, FieldError }  from "@/components/ui/form";
 import { meetingFormSchema }     from "@/lib/validations";
 import type { MeetingFormData }  from "@/types/meeting";
+import { useContactSearch, type Contact } from "@/lib/useContacts";
+
+const STORAGE_KEY = "mombetopia_form_draft";
 
 const TONES = [
   { value: "professional", label: "Professional" },
@@ -18,7 +21,8 @@ const TONES = [
 type AttendeeRow = { name: string; email: string };
 type FormErrors  = Partial<Record<keyof MeetingFormData, string>>;
 
-const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB
+const MAX_FILE_SIZE    = 40  * 1024 * 1024; // 40 MB per file
+const MAX_EMAIL_SIZE   = 40  * 1024 * 1024; // 40 MB total — AWS SES extended limit
 
 const SUPPORTED_EXTS = new Set([
   "jpg","jpeg","png","gif","svg","webp","psd",
@@ -35,15 +39,96 @@ interface Props {
   isLoading: boolean;
 }
 
+const DEFAULT_FORM = { title: "", date: new Date().toISOString().split("T")[0], notes: "", tone: "professional" };
+const DEFAULT_ATTENDEES: AttendeeRow[] = [{ name: "", email: "" }];
+
+function loadDraft() {
+  if (typeof window === "undefined") return null;
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null"); } catch { return null; }
+}
+
+// Attendee suggestion dropdown
+function SuggestionDropdown({
+  suggestions,
+  onSelect,
+  inputRef,
+}: {
+  suggestions: Contact[];
+  onSelect: (c: Contact) => void;
+  inputRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  if (suggestions.length === 0) return null;
+  return (
+    <div
+      className="absolute left-0 top-full mt-1 z-50 w-full min-w-[220px] bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden"
+    >
+      {suggestions.map((c) => (
+        <button
+          key={c.id}
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); onSelect(c); }}
+          className="w-full text-left px-3 py-2 hover:bg-brand-50 transition-colors"
+        >
+          <div className="text-sm font-medium text-gray-800 truncate">{c.name}</div>
+          <div className="text-xs text-gray-400 truncate">{c.email}</div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function MeetingForm({ onSubmit, isLoading }: Props) {
-  const [form, setForm]         = useState({ title: "", date: new Date().toISOString().split("T")[0], notes: "", tone: "professional" });
-  const [attendees, setAttendees] = useState<AttendeeRow[]>([{ name: "", email: "" }]);
-  const [errors, setErrors]     = useState<FormErrors>({});
-  const [mode, setMode]         = useState<"ai" | "manual">("ai");
-  const [files, setFiles]       = useState<File[]>([]);
+  const [form, setForm]             = useState<typeof DEFAULT_FORM>(DEFAULT_FORM);
+  const [attendees, setAttendees]   = useState<AttendeeRow[]>(DEFAULT_ATTENDEES);
+  const [errors, setErrors]         = useState<FormErrors>({});
+  const [mode, setMode]             = useState<"ai" | "manual">("ai");
+  const [files, setFiles]           = useState<File[]>([]);
   const [fileAlerts, setFileAlerts] = useState<string[]>([]);
   const [isReadingFiles, setIsReadingFiles] = useState(false);
-  const fileRef                 = useRef<HTMLInputElement>(null);
+  const fileRef                     = useRef<HTMLInputElement>(null);
+
+  // Per-row server-side contact search — one hook instance per rendered row
+  const row0 = useContactSearch();
+  const row1 = useContactSearch();
+  const row2 = useContactSearch();
+  const row3 = useContactSearch();
+  const row4 = useContactSearch();
+  const rowSearchHooks = [row0, row1, row2, row3, row4];
+  const getRowSearch = (i: number) => rowSearchHooks[i] ?? row4;
+  const [focusedInput, setFocusedInput] = useState<{ row: number; field: "name" | "email" } | null>(null);
+
+  // Load draft from localStorage after hydration to avoid SSR mismatch
+  useEffect(() => {
+    const draft = loadDraft();
+    if (!draft) return;
+    if (draft.form)      setForm(draft.form);
+    if (draft.attendees) setAttendees(draft.attendees);
+    if (draft.mode)      setMode(draft.mode);
+  }, []);
+
+  // Close dropdown on Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFocusedInput(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Persist draft to localStorage on every change
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ form, attendees, mode }));
+  }, [form, attendees, mode]);
+
+  const clearDraft = () => {
+    localStorage.removeItem(STORAGE_KEY);
+    setForm(DEFAULT_FORM);
+    setAttendees(DEFAULT_ATTENDEES);
+    setMode("ai");
+    setFiles([]);
+    setFileAlerts([]);
+    setErrors({});
+  };
 
   const set =
     (key: keyof typeof form) =>
@@ -55,6 +140,11 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
   const setAttendee = (i: number, field: keyof AttendeeRow, value: string) => {
     setAttendees((prev) => prev.map((a, idx) => idx === i ? { ...a, [field]: value } : a));
     setErrors((prev) => ({ ...prev, attendees: undefined, attendeeEmails: undefined }));
+  };
+
+  const selectSuggestion = (i: number, contact: Contact) => {
+    setAttendees((prev) => prev.map((a, idx) => idx === i ? { name: contact.name, email: contact.email } : a));
+    setFocusedInput(null);
   };
 
   const addRow    = () => setAttendees((prev) => [...prev, { name: "", email: "" }]);
@@ -77,6 +167,14 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
       }
       valid.push(f);
     });
+
+    // Check total size against SES limit
+    const currentTotal = files.reduce((s, f) => s + f.size, 0);
+    const newTotal     = valid.reduce((s, f) => s + f.size, 0);
+    if (currentTotal + newTotal > MAX_EMAIL_SIZE) {
+      alerts.push(`Total attachments exceed 40 MB (AWS SES limit). Please reduce attachment size.`);
+      valid.splice(0); // block all new files
+    }
 
     if (alerts.length > 0) setFileAlerts(alerts);
 
@@ -130,12 +228,21 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-brand-50 via-purple-50 to-pink-50 flex items-center gap-2">
-        <span className="w-7 h-7 rounded-lg bg-hero-gradient flex items-center justify-center shrink-0">
-          <FileText className="w-3.5 h-3.5 text-white" />
-        </span>
-        <h2 className="font-semibold text-gray-900">Meeting Details</h2>
+    <div className="rounded-2xl overflow-hidden shadow-xl" style={{ background: "rgba(255,255,255,0.55)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.45)" }}>
+      <div className="px-6 py-4 border-b flex items-center justify-between" style={{ background: "rgba(255,255,255,0.35)", borderColor: "rgba(255,255,255,0.35)" }}>
+        <div className="flex items-center gap-2">
+          <span className="w-7 h-7 rounded-lg bg-hero-gradient flex items-center justify-center shrink-0">
+            <FileText className="w-3.5 h-3.5 text-white" />
+          </span>
+          <h2 className="font-semibold text-gray-900">Meeting Details</h2>
+        </div>
+        <button
+          type="button"
+          onClick={clearDraft}
+          className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors"
+        >
+          <Eraser className="w-3.5 h-3.5" /> Clear all
+        </button>
       </div>
 
       <form onSubmit={handleSubmit} noValidate className="p-6 space-y-5">
@@ -199,47 +306,88 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
 
         {/* Attendees */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-1 text-[11px] font-bold text-gray-500 uppercase tracking-widest">
-              <UserPlus className="w-3 h-3" /> Attendees
-            </label>
+          <label className="flex items-center gap-1 text-[11px] font-bold text-gray-500 uppercase tracking-widest">
+            <UserPlus className="w-3 h-3" /> Attendees
+          </label>
+
+          <div className="space-y-2">
+            {attendees.map((row, i) => {
+              const { suggestions, search: searchContacts, clear: clearSuggestions } = getRowSearch(i);
+              const nameActive  = focusedInput?.row === i && focusedInput.field === "name";
+              const emailActive = focusedInput?.row === i && focusedInput.field === "email";
+
+              return (
+                <div key={i} className="flex gap-2 items-start">
+                  {/* Name field */}
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      value={row.name}
+                      onChange={(e) => {
+                        setAttendee(i, "name", e.target.value);
+                        setFocusedInput({ row: i, field: "name" });
+                        searchContacts(e.target.value);
+                      }}
+                      onFocus={() => { setFocusedInput({ row: i, field: "name" }); searchContacts(row.name || " "); }}
+                      onBlur={() => setTimeout(() => { setFocusedInput(null); clearSuggestions(); }, 300)}
+                      placeholder="Name"
+                      className={cn(fieldCls("focus:ring-brand-400"), "w-full")}
+                    />
+                    {nameActive && suggestions.length > 0 && (
+                      <SuggestionDropdown
+                        suggestions={suggestions}
+                        onSelect={(c) => { selectSuggestion(i, c); clearSuggestions(); setFocusedInput(null); }}
+                        inputRef={{ current: null }}
+                      />
+                    )}
+                  </div>
+
+                  {/* Email field */}
+                  <div className="flex-1 relative">
+                    <input
+                      type="email"
+                      value={row.email}
+                      onChange={(e) => {
+                        setAttendee(i, "email", e.target.value);
+                        setFocusedInput({ row: i, field: "email" });
+                        searchContacts(e.target.value);
+                      }}
+                      onFocus={() => { setFocusedInput({ row: i, field: "email" }); searchContacts(row.email || " "); }}
+                      onBlur={() => setTimeout(() => { setFocusedInput(null); clearSuggestions(); }, 300)}
+                      placeholder="email@example.com"
+                      className={cn(fieldCls("focus:ring-brand-400"), "w-full")}
+                    />
+                    {emailActive && suggestions.length > 0 && (
+                      <SuggestionDropdown
+                        suggestions={suggestions}
+                        onSelect={(c) => { selectSuggestion(i, c); clearSuggestions(); setFocusedInput(null); }}
+                        inputRef={{ current: null }}
+                      />
+                    )}
+                  </div>
+
+                  {attendees.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeRow(i)}
+                      className="mt-0.5 p-2.5 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end">
             <button
               type="button"
               onClick={addRow}
-              className="flex items-center gap-1 text-[11px] font-bold text-brand-600 hover:text-brand-800 transition-colors"
+              className="flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-800 transition-colors"
             >
-              <Plus className="w-3 h-3" /> Add
+              <Plus className="w-3.5 h-3.5" /> Add
             </button>
-          </div>
-
-          <div className="space-y-2">
-            {attendees.map((row, i) => (
-              <div key={i} className="flex gap-2 items-start">
-                <input
-                  type="text"
-                  value={row.name}
-                  onChange={(e) => setAttendee(i, "name", e.target.value)}
-                  placeholder="Name"
-                  className={cn(fieldCls("focus:ring-brand-400"), "flex-1")}
-                />
-                <input
-                  type="email"
-                  value={row.email}
-                  onChange={(e) => setAttendee(i, "email", e.target.value)}
-                  placeholder="email@example.com"
-                  className={cn(fieldCls("focus:ring-brand-400"), "flex-1")}
-                />
-                {attendees.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeRow(i)}
-                    className="mt-0.5 p-2.5 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            ))}
           </div>
           <FieldError msg={errors.attendeeEmails} />
         </div>
@@ -288,7 +436,7 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
               : <Paperclip className="w-4 h-4 text-gray-400 mx-auto mb-1" />
             }
             <p className="text-xs text-gray-400">{isReadingFiles ? "Loading files…" : "Click or drag files here"}</p>
-            <p className="text-[10px] text-gray-300 mt-0.5">PDF, Word, Excel, PPT, CSV, Images, PSD · Max 1 GB</p>
+            <p className="text-[10px] text-gray-300 mt-0.5">PDF, Word, Excel, PPT, CSV, Images, PSD · Max 40 MB total</p>
             <input
               ref={fileRef}
               type="file"
@@ -316,7 +464,7 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
                   <span className="flex items-center gap-1.5 truncate">
                     <Paperclip className="w-3 h-3 text-gray-400 shrink-0" />
                     <span className="truncate">{f.name}</span>
-                    <span className="text-gray-400 shrink-0">({(f.size / 1024).toFixed(0)} KB)</span>
+                    <span className="text-gray-400 shrink-0">({(f.size / (1024 * 1024)).toFixed(1)} MB)</span>
                   </span>
                   <button type="button" onClick={() => removeFile(f.name)} className="ml-2 text-gray-400 hover:text-red-500 shrink-0">
                     <X className="w-3.5 h-3.5" />
