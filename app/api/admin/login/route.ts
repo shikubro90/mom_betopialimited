@@ -19,14 +19,17 @@ export async function POST(req: NextRequest) {
 
   const adminEmail    = process.env.ADMIN_EMAIL;
   const adminHash     = process.env.ADMIN_PASSWORD_HASH;
+  const adminPlain    = process.env.ADMIN_PASSWORD;
 
-  if (!adminEmail || !adminHash) {
-    console.error("[ADMIN LOGIN] ADMIN_EMAIL or ADMIN_PASSWORD_HASH not set");
+  if (!adminEmail || (!adminHash && !adminPlain)) {
+    console.error("[ADMIN LOGIN] ADMIN_EMAIL or ADMIN_PASSWORD(_HASH) not set");
     return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
   }
 
   const emailMatch    = email.toLowerCase() === adminEmail.toLowerCase();
-  const passwordMatch = await bcrypt.compare(password, adminHash);
+  const passwordMatch = adminHash
+    ? await bcrypt.compare(password, adminHash)
+    : password === adminPlain;
 
   if (!emailMatch || !passwordMatch) {
     // Same response for both to prevent email enumeration
