@@ -22,7 +22,7 @@ jobs:
             cd /var/www/meetbrief
             git fetch origin
             git checkout prod
-            git pull origin prod
+            git reset --hard origin/prod
             npm install --production=false
             npx prisma generate
             npx prisma db push
