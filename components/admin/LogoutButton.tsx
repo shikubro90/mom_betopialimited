@@ -10,8 +10,8 @@ export function LogoutButton() {
 
   const handleLogout = async () => {
     setLoading(true);
-    await fetch("/api/admin/logout", { method: "POST" });
-    router.push("/admin/login");
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/superadmin/login");
     router.refresh();
   };
 
