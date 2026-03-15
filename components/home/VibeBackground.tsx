@@ -181,20 +181,6 @@ export function VibeBackground() {
         />
       ))}
 
-      {/* ── Vibe label (subtle, top-right) ──────── */}
-      <div
-        aria-hidden
-        className="pointer-events-none fixed top-16 right-4 z-10 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold backdrop-blur-sm"
-        style={{
-          background: "rgba(255,255,255,0.15)",
-          border:     "1px solid rgba(255,255,255,0.25)",
-          color:      vibe === "night" || vibe === "evening" ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.45)",
-          animation:  "vibe-fadein 3s ease",
-        }}
-      >
-        <span>{cfg.emoji}</span>
-        <span>{cfg.label}</span>
-      </div>
     </>
   );
 }

@@ -7,13 +7,13 @@ import { Logo }                 from "@/components/shared/Logo";
 import { useVibe }              from "@/lib/useVibe";
 import { VibeCalendar }         from "@/components/home/VibeCalendar";
 
-function getGreeting() {
+function getGreeting(): { text: string; emoji: string } {
   const h = new Date().getHours();
-  if (h >= 5  && h < 12) return "Good morning";
-  if (h >= 12 && h < 14) return "Good noon";
-  if (h >= 14 && h < 17) return "Good afternoon";
-  if (h >= 17 && h < 20) return "Good evening";
-  return "Good night";
+  if (h >= 5  && h < 12) return { text: "Good morning",   emoji: "🌅" };
+  if (h >= 12 && h < 14) return { text: "Good noon",      emoji: "☀️" };
+  if (h >= 14 && h < 17) return { text: "Good afternoon", emoji: "🌤️" };
+  if (h >= 17 && h < 20) return { text: "Good evening",   emoji: "🌇" };
+  return                         { text: "Good night",     emoji: "🌙" };
 }
 
 export function Navbar() {
@@ -54,7 +54,7 @@ export function Navbar() {
             user ? (
               <>
                 <span className="text-sm font-medium hidden sm:block" style={{ color: theme.text }}>
-                  {getGreeting()}, <span className="font-bold">{user.name}</span>
+                  {(() => { const g = getGreeting(); return <>{g.emoji} {g.text}, <span className="font-bold">{user.name}</span></>; })()}
                 </span>
                 <button
                   onClick={handleLogout}
