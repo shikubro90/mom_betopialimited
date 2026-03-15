@@ -21,7 +21,8 @@ const TONES = [
 type AttendeeRow = { name: string; email: string };
 type FormErrors  = Partial<Record<keyof MeetingFormData, string>>;
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+const MAX_FILE_SIZE    = 50  * 1024 * 1024; // 50 MB per file
+const MAX_EMAIL_SIZE   = 10  * 1024 * 1024; // 10 MB total — AWS SES limit
 
 const SUPPORTED_EXTS = new Set([
   "jpg","jpeg","png","gif","svg","webp","psd",
@@ -166,6 +167,14 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
       }
       valid.push(f);
     });
+
+    // Check total size against SES limit
+    const currentTotal = files.reduce((s, f) => s + f.size, 0);
+    const newTotal     = valid.reduce((s, f) => s + f.size, 0);
+    if (currentTotal + newTotal > MAX_EMAIL_SIZE) {
+      alerts.push(`Total attachments exceed 10 MB (AWS SES limit). Please reduce attachment size.`);
+      valid.splice(0); // block all new files
+    }
 
     if (alerts.length > 0) setFileAlerts(alerts);
 
@@ -427,7 +436,7 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
               : <Paperclip className="w-4 h-4 text-gray-400 mx-auto mb-1" />
             }
             <p className="text-xs text-gray-400">{isReadingFiles ? "Loading files…" : "Click or drag files here"}</p>
-            <p className="text-[10px] text-gray-300 mt-0.5">PDF, Word, Excel, PPT, CSV, Images, PSD · Max 50 MB</p>
+            <p className="text-[10px] text-gray-300 mt-0.5">PDF, Word, Excel, PPT, CSV, Images, PSD · Max 10 MB total (email limit)</p>
             <input
               ref={fileRef}
               type="file"

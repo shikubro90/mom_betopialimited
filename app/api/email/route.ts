@@ -3,9 +3,6 @@ import { sendEmail }        from "@/lib/mailer";
 import { db }               from "@/lib/db";
 import { emailBodySchema, parseEmails } from "@/lib/validations";
 
-export const config = {
-  api: { bodyParser: { sizeLimit: "50mb" } },
-};
 
 /* ─── Markdown renderer ──────────────────────────────────── */
 function renderMd(text: string): string {
