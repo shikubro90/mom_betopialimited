@@ -7,6 +7,15 @@ import { Logo }                 from "@/components/shared/Logo";
 import { useVibe }              from "@/lib/useVibe";
 import { VibeCalendar }         from "@/components/home/VibeCalendar";
 
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h >= 5  && h < 12) return "Good morning";
+  if (h >= 12 && h < 14) return "Good noon";
+  if (h >= 14 && h < 17) return "Good afternoon";
+  if (h >= 17 && h < 20) return "Good evening";
+  return "Good night";
+}
+
 export function Navbar() {
   const router = useRouter();
   const theme  = useVibe();
@@ -44,7 +53,9 @@ export function Navbar() {
           {checked && (
             user ? (
               <>
-                <span className="text-sm font-medium hidden sm:block" style={{ color: theme.text }}>{user.name}</span>
+                <span className="text-sm font-medium hidden sm:block" style={{ color: theme.text }}>
+                  {getGreeting()}, <span className="font-bold">{user.name.split(" ")[0]}</span>
+                </span>
                 <button
                   onClick={handleLogout}
                   className="px-4 py-1.5 text-sm font-semibold text-white rounded-lg bg-brand-600 hover:bg-brand-500 transition-colors"
