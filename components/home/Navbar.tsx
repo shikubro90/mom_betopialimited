@@ -31,8 +31,7 @@ export function Navbar() {
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    setUser(null);
-    router.refresh();
+    window.location.href = "/"; // full reload clears all state
   };
 
   const navBg     = theme.isDark ? "rgba(10,10,30,0.55)"   : "rgba(255,255,255,0.65)";
@@ -50,19 +49,26 @@ export function Navbar() {
           <VibeCalendar />
         </div>
         <div className="flex items-center gap-2">
+          {/* Greeting — shown for all users, with name if logged in */}
+          {checked && (
+            <span className="text-sm font-medium hidden sm:block" style={{ color: theme.text }}>
+              {(() => {
+                const g = getGreeting();
+                return user
+                  ? <>{g.emoji} {g.text}, <span className="font-bold">{user.name}</span></>
+                  : <>{g.emoji} {g.text}</>;
+              })()}
+            </span>
+          )}
+
           {checked && (
             user ? (
-              <>
-                <span className="text-sm font-medium hidden sm:block" style={{ color: theme.text }}>
-                  {(() => { const g = getGreeting(); return <>{g.emoji} {g.text}, <span className="font-bold">{user.name}</span></>; })()}
-                </span>
-                <button
-                  onClick={handleLogout}
-                  className="px-4 py-1.5 text-sm font-semibold text-white rounded-lg bg-brand-600 hover:bg-brand-500 transition-colors"
-                >
-                  Logout
-                </button>
-              </>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-1.5 text-sm font-semibold text-white rounded-lg bg-brand-600 hover:bg-brand-500 transition-colors"
+              >
+                Logout
+              </button>
             ) : (
               <>
                 <Link

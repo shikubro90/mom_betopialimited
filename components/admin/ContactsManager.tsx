@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
-import { Trash2, Upload, Search, Users, X, AlertCircle, CheckCircle2, DatabaseZap } from "lucide-react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Trash2, Upload, Search, Users, X, AlertCircle, CheckCircle2, DatabaseZap, UserPlus, Globe, Plus } from "lucide-react";
 
 type Contact = {
   id:         string;
@@ -57,6 +57,20 @@ export function ContactsManager({ initialContacts }: Props) {
   const [dragOver, setDragOver]   = useState(false);
   const [toast, setToast]         = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Manual add contact
+  const [newName,  setNewName]  = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [addingContact, setAddingContact] = useState(false);
+
+  // Domain management
+  const [domains,     setDomains]     = useState<{ id: string; domain: string; active: boolean }[]>([]);
+  const [newDomain,   setNewDomain]   = useState("");
+  const [addingDomain, setAddingDomain] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/domains").then(r => r.ok ? r.json() : []).then(setDomains).catch(() => {});
+  }, []);
 
   const showToast = (type: "success" | "error", msg: string) => {
     setToast({ type, msg });
@@ -150,6 +164,52 @@ export function ContactsManager({ initialContacts }: Props) {
     }
   };
 
+  const addContact = async () => {
+    if (!newName.trim() || !newEmail.trim()) { showToast("error", "Name and email are required."); return; }
+    if (!newEmail.includes("@")) { showToast("error", "Invalid email address."); return; }
+    setAddingContact(true);
+    try {
+      const res = await fetch("/api/admin/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contacts: [{ name: newName.trim(), email: newEmail.trim() }] }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); showToast("error", (e as {error?:string}).error ?? "Failed"); return; }
+      showToast("success", `${newName} added successfully.`);
+      setNewName(""); setNewEmail("");
+      await refreshContacts();
+    } catch { showToast("error", "Network error."); }
+    finally { setAddingContact(false); }
+  };
+
+  const addDomain = async () => {
+    const d = newDomain.trim().toLowerCase().replace(/^@/, "");
+    if (!d || !d.includes(".")) { showToast("error", "Enter a valid domain e.g. company.com"); return; }
+    setAddingDomain(true);
+    try {
+      const res = await fetch("/api/admin/domains", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain: d }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); showToast("error", (e as {error?:string}).error ?? "Failed"); return; }
+      showToast("success", `${d} approved.`);
+      setNewDomain("");
+      const updated = await fetch("/api/admin/domains").then(r => r.json()).catch(() => domains);
+      setDomains(updated);
+    } catch { showToast("error", "Network error."); }
+    finally { setAddingDomain(false); }
+  };
+
+  const deleteDomain = async (id: string, domain: string) => {
+    try {
+      const res = await fetch(`/api/admin/domains/${id}`, { method: "DELETE" });
+      if (!res.ok) { showToast("error", "Failed to remove domain."); return; }
+      setDomains(prev => prev.filter(d => d.id !== id));
+      showToast("success", `${domain} removed.`);
+    } catch { showToast("error", "Network error."); }
+  };
+
   const seedBuiltIn = async () => {
     setSeeding(true);
     try {
@@ -208,6 +268,76 @@ export function ContactsManager({ initialContacts }: Props) {
           <DatabaseZap className="w-3.5 h-3.5" />
           {seeding ? "Seeding…" : "Seed 171 Contacts"}
         </button>
+      </div>
+
+      {/* Approved Domains */}
+      <div className="rounded-xl border border-gray-800 bg-gray-900 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Globe className="w-4 h-4 text-brand-400" />
+          <h2 className="text-sm font-bold text-gray-200">Approved Domains</h2>
+          <span className="px-2 py-0.5 bg-gray-800 rounded-full text-xs text-gray-400">{domains.length} domains</span>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newDomain}
+            onChange={e => setNewDomain(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && addDomain()}
+            placeholder="company.com"
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
+          <button
+            onClick={addDomain}
+            disabled={addingDomain}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-brand-700 hover:bg-brand-600 text-white transition-colors disabled:opacity-50"
+          >
+            <Plus className="w-3.5 h-3.5" /> {addingDomain ? "Adding…" : "Add Domain"}
+          </button>
+        </div>
+        {domains.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {domains.map(d => (
+              <span key={d.id} className="flex items-center gap-1.5 px-3 py-1 bg-gray-800 border border-gray-700 rounded-full text-xs text-gray-300">
+                @{d.domain}
+                <button onClick={() => deleteDomain(d.id, d.domain)} className="text-gray-500 hover:text-red-400 transition-colors">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Manual Add Contact */}
+      <div className="rounded-xl border border-gray-800 bg-gray-900 p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <UserPlus className="w-4 h-4 text-brand-400" />
+          <h2 className="text-sm font-bold text-gray-200">Add Contact Manually</h2>
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            placeholder="Full Name"
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
+          <input
+            type="email"
+            value={newEmail}
+            onChange={e => setNewEmail(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && addContact()}
+            placeholder="email@company.com"
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
+          <button
+            onClick={addContact}
+            disabled={addingContact}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-emerald-700 hover:bg-emerald-600 text-white transition-colors disabled:opacity-50"
+          >
+            <UserPlus className="w-3.5 h-3.5" /> {addingContact ? "Adding…" : "Add"}
+          </button>
+        </div>
       </div>
 
       {/* CSV Upload */}
