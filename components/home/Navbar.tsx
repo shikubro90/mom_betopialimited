@@ -54,7 +54,7 @@ export function Navbar() {
             user ? (
               <>
                 <span className="text-sm font-medium hidden sm:block" style={{ color: theme.text }}>
-                  {getGreeting()}, <span className="font-bold">{user.name.split(" ")[0]}</span>
+                  {getGreeting()}, <span className="font-bold">{user.name}</span>
                 </span>
                 <button
                   onClick={handleLogout}
