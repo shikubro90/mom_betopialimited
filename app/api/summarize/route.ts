@@ -4,6 +4,10 @@ import { db }                  from "@/lib/db";
 import { summarizeBodySchema } from "@/lib/validations";
 import { checkAiQuota }        from "@/lib/quota";
 
+export const config = {
+  api: { bodyParser: { sizeLimit: "50mb" } },
+};
+
 /* ─── Tone descriptions ───────────────────────────────────── */
 const TONE_MAP: Record<string, string> = {
   professional: "formal and professional",

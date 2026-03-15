@@ -21,7 +21,7 @@ const TONES = [
 type AttendeeRow = { name: string; email: string };
 type FormErrors  = Partial<Record<keyof MeetingFormData, string>>;
 
-const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
 const SUPPORTED_EXTS = new Set([
   "jpg","jpeg","png","gif","svg","webp","psd",
@@ -427,7 +427,7 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
               : <Paperclip className="w-4 h-4 text-gray-400 mx-auto mb-1" />
             }
             <p className="text-xs text-gray-400">{isReadingFiles ? "Loading files…" : "Click or drag files here"}</p>
-            <p className="text-[10px] text-gray-300 mt-0.5">PDF, Word, Excel, PPT, CSV, Images, PSD · Max 1 GB</p>
+            <p className="text-[10px] text-gray-300 mt-0.5">PDF, Word, Excel, PPT, CSV, Images, PSD · Max 50 MB</p>
             <input
               ref={fileRef}
               type="file"
@@ -455,7 +455,7 @@ export function MeetingForm({ onSubmit, isLoading }: Props) {
                   <span className="flex items-center gap-1.5 truncate">
                     <Paperclip className="w-3 h-3 text-gray-400 shrink-0" />
                     <span className="truncate">{f.name}</span>
-                    <span className="text-gray-400 shrink-0">({(f.size / 1024).toFixed(0)} KB)</span>
+                    <span className="text-gray-400 shrink-0">({(f.size / (1024 * 1024)).toFixed(1)} MB)</span>
                   </span>
                   <button type="button" onClick={() => removeFile(f.name)} className="ml-2 text-gray-400 hover:text-red-500 shrink-0">
                     <X className="w-3.5 h-3.5" />
