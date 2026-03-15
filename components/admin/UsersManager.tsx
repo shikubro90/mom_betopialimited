@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Shield, ShieldOff, X, AlertCircle, CheckCircle2, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, Shield, ShieldOff, X, AlertCircle, CheckCircle2, Users, RefreshCw } from "lucide-react";
 
 type UserRow = {
   id:        string;
@@ -17,10 +18,18 @@ interface Props {
 }
 
 export function UsersManager({ initialUsers }: Props) {
-  const [users, setUsers]   = useState<UserRow[]>(initialUsers);
-  const [query, setQuery]   = useState("");
-  const [loading, setLoading] = useState<string | null>(null);
-  const [toast, setToast]   = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const router = useRouter();
+  const [users, setUsers]       = useState<UserRow[]>(initialUsers);
+  const [query, setQuery]       = useState("");
+  const [loading, setLoading]   = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [toast, setToast]       = useState<{ type: "success" | "error"; msg: string } | null>(null);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    router.refresh();
+    setTimeout(() => setRefreshing(false), 800);
+  };
 
   const showToast = (type: "success" | "error", msg: string) => {
     setToast({ type, msg });
@@ -92,13 +101,24 @@ export function UsersManager({ initialUsers }: Props) {
             {users.length} total
           </span>
         </div>
-        <div className="flex gap-3 text-xs">
-          <span className="px-2.5 py-1 bg-emerald-950 border border-emerald-800 text-emerald-400 rounded-full">
-            {activeCount} active
-          </span>
-          <span className="px-2.5 py-1 bg-red-950 border border-red-800 text-red-400 rounded-full">
-            {blockedCount} blocked
-          </span>
+        <div className="flex items-center gap-3">
+          <div className="flex gap-3 text-xs">
+            <span className="px-2.5 py-1 bg-emerald-950 border border-emerald-800 text-emerald-400 rounded-full">
+              {activeCount} active
+            </span>
+            <span className="px-2.5 py-1 bg-red-950 border border-red-800 text-red-400 rounded-full">
+              {blockedCount} blocked
+            </span>
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            title="Refresh user list"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-800 border border-gray-700 text-gray-400 hover:text-gray-100 hover:bg-gray-700 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
         </div>
       </div>
 
